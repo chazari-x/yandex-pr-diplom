@@ -52,7 +52,7 @@ func gzipMiddleware(next http.Handler) http.Handler {
 		if strings.Contains(r.Header.Get("Content-Encoding"), "gzip") {
 			gz, err := gzip.NewReader(r.Body)
 			if err != nil {
-				log.Print("GZIP: new reader err: ", err)
+				log.Print("gzipMiddleware: new reader err: ", err)
 				w.WriteHeader(http.StatusInternalServerError)
 				return
 			}
@@ -71,7 +71,7 @@ func gzipMiddleware(next http.Handler) http.Handler {
 
 		gz, err := gzip.NewWriterLevel(w, gzip.BestSpeed)
 		if err != nil {
-			log.Print("GZIP: new writer level err: ", err)
+			log.Print("gzipMiddleware: new writer level err: ", err)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -136,14 +136,14 @@ func cookieMiddleware(next http.Handler) http.Handler {
 		cookie, err := r.Cookie(userIdentification)
 		if err != nil {
 			if !errors.Is(err, http.ErrNoCookie) {
-				log.Print("COOKIE: r.Cookie err: ", err)
+				log.Print("cookieMiddleware: r.Cookie err: ", err)
 				w.WriteHeader(http.StatusInternalServerError)
 				return
 			}
 
 			uid, err = setCookie(w)
 			if err != nil {
-				log.Print("COOKIE: set user identification err: ", err)
+				log.Print("cookieMiddleware: set user identification err: ", err)
 				w.WriteHeader(http.StatusInternalServerError)
 				return
 			}
@@ -180,14 +180,14 @@ type userStruct struct {
 	Password string `json:"password"`
 }
 
-func (c *Controller) Register(w http.ResponseWriter, r *http.Request) {
+func (c *Controller) PostRegister(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	uid := fmt.Sprintf("%v", r.Context().Value(identification))
+	cookie := fmt.Sprintf("%v", r.Context().Value(identification))
 
 	b, err := io.ReadAll(r.Body)
 	if err != nil {
-		log.Print("REGISTER: read all err: ", err)
+		log.Print("PostRegister: read all err: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -201,7 +201,7 @@ func (c *Controller) Register(w http.ResponseWriter, r *http.Request) {
 
 	err = json.Unmarshal(b, &user)
 	if err != nil {
-		log.Print("REGISTER: json unmarshal err: ", err)
+		log.Print("PostRegister: json unmarshal err: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -209,42 +209,42 @@ func (c *Controller) Register(w http.ResponseWriter, r *http.Request) {
 	var status = http.StatusOK
 
 	for i := 0; i < 2; i++ {
-		err = c.db.Register(user.Login, user.Password, uid)
+		err = c.db.Register(user.Login, user.Password, cookie)
 		if err == nil {
 			break
 		}
 
-		if strings.Contains(err.Error(), "register conflict") {
+		if errors.Is(err, c.db.Err.ErrRegisterConflict) {
 			status = http.StatusConflict
 			break
 		}
 
-		if !strings.Contains(err.Error(), "duplicate cookie") {
+		if !errors.Is(err, c.db.Err.ErrDuplicate) {
 			log.Printf("register: %s, login: %s, password: %s", err, user.Login, user.Password)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 
-		uid, err = setCookie(w)
+		cookie, err = setCookie(w)
 		if err != nil {
-			log.Print("REGISTER: set cookie err: ", err)
+			log.Print("PostRegister: set cookie err: ", err)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 	}
 
-	log.Printf("register: %d, cookie: %s, login: %s, password: %s", status, uid, user.Login, user.Password)
+	log.Printf("register: %d, cookie: %s, login: %s, password: %s", status, cookie, user.Login, user.Password)
 	w.WriteHeader(status)
 }
 
-func (c *Controller) Login(w http.ResponseWriter, r *http.Request) {
+func (c *Controller) PostLogin(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	uid := fmt.Sprintf("%v", r.Context().Value(identification))
+	cookie := fmt.Sprintf("%v", r.Context().Value(identification))
 
 	b, err := io.ReadAll(r.Body)
 	if err != nil {
-		log.Print("LOGIN: read all err: ", err)
+		log.Print("PostLogin: read all err: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -258,16 +258,16 @@ func (c *Controller) Login(w http.ResponseWriter, r *http.Request) {
 
 	err = json.Unmarshal(b, &user)
 	if err != nil {
-		log.Print("LOGIN: json unmarshal err: ", err)
+		log.Print("PostLogin: json unmarshal err: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
 	var status = http.StatusOK
 
-	err = c.db.Login(user.Login, user.Password, uid)
+	err = c.db.Login(user.Login, user.Password, cookie)
 	if err != nil {
-		if !strings.Contains(err.Error(), "empty") {
+		if !errors.Is(err, c.db.Err.ErrEmpty) {
 			log.Printf("login: %s, login: %s, password: %s", err, user.Login, user.Password)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
@@ -276,6 +276,53 @@ func (c *Controller) Login(w http.ResponseWriter, r *http.Request) {
 		status = http.StatusUnauthorized
 	}
 
-	log.Printf("login: %d, cookie: %s, login: %s, password: %s", status, uid, user.Login, user.Password)
+	log.Printf("login: %d, cookie: %s, login: %s, password: %s", status, cookie, user.Login, user.Password)
+	w.WriteHeader(status)
+}
+
+func (c *Controller) PostOrders(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	cookie := fmt.Sprintf("%v", r.Context().Value(identification))
+
+	b, err := io.ReadAll(r.Body)
+	if err != nil {
+		log.Print("PostOrders: read all err: ", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	if string(b) == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	var order int
+
+	err = json.Unmarshal(b, &order)
+	if err != nil {
+		log.Print("PostOrders: json unmarshal err: ", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	var status = http.StatusAccepted
+
+	err = c.db.AddOrder(cookie, order)
+	if err != nil {
+		if errors.Is(err, c.db.Err.ErrNoAuthorization) {
+			status = http.StatusUnauthorized
+		} else if errors.Is(err, c.db.Err.ErrDuplicate) {
+			status = http.StatusOK
+		} else if errors.Is(err, c.db.Err.ErrUsed) {
+			status = http.StatusConflict
+		} else {
+			log.Print("PostOrders: add order err: ", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+	}
+
+	log.Printf("orders: %d, cookie: %s, order: %d", status, cookie, order)
 	w.WriteHeader(status)
 }

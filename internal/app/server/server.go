@@ -24,25 +24,25 @@ func StartServer() error {
 
 	r := chi.NewRouter()
 
-	r.Post("/api/user/register", c.Register)
+	r.Post("/api/user/register", c.PostRegister)
 	//регистрация пользователя
 
-	r.Post("/api/user/login", c.Login)
+	r.Post("/api/user/login", c.PostLogin)
 	//аутентификация пользователя
 
-	//r.Post("/api/user/orders", )
+	r.Post("/api/user/orders", c.PostOrders)
 	//загрузка пользователем номера заказа для расчета
 
-	//r.Get	("/api/user/orders", )
+	//r.Get	("/api/user/orders", c.GetOrders)
 	//получение списка загруженные пользователем номеров заказов, статусов их обработки и информации о начислениях
 
-	//r.Get	("/api/user/balance", )
+	//r.Get	("/api/user/balance", c.GetBalance)
 	//получение текущего баланса счета баллов лояльности пользователя
 
-	//r.Post("/api/user/balance/withdraw", )
+	//r.Post("/api/user/balance/withdraw", c.PostWithDraw)
 	//запрос на списание баллов с накопительного счета в счет оплаты нового заказа
 
-	//r.Get	("/api/user/withdrawals", )
+	//r.Get	("/api/user/withdrawals", c.GetWithDrawAls)
 	//получение информации о выводе средств накопительного счета пользователем
 
 	return http.ListenAndServe(conf.RunAddress, handlers.MiddlewaresConveyor(r))
