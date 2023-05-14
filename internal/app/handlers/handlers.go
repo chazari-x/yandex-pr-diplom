@@ -225,34 +225,21 @@ func (c *Controller) PostRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var status = http.StatusOK
-	for i := 0; i < 2; i++ {
-		err = c.db.Register(user.Login, user.Password, cookie)
-		if err == nil {
-			break
-		}
-
+	err = c.db.Register(user.Login, user.Password, cookie)
+	if err != nil {
 		if errors.Is(err, c.db.Err.RegisterConflict) {
-			status = http.StatusConflict
-			break
-		}
-
-		if !errors.Is(err, c.db.Err.Duplicate) {
-			log.Printf("PostRegister: %s, login: %s, password: %s", err, user.Login, user.Password)
-			w.WriteHeader(http.StatusInternalServerError)
+			log.Printf("PostRegister: %d, cookie: %s, login: %s, password: %s", http.StatusConflict, cookie, user.Login, user.Password)
+			w.WriteHeader(http.StatusConflict)
 			return
 		}
 
-		cookie, err = setCookie(w)
-		if err != nil {
-			log.Print("PostRegister: set cookie err: ", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
+		log.Printf("PostRegister: %s, cookie: %s, login: %s, password: %s", err, cookie, user.Login, user.Password)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 
-	log.Printf("PostRegister: %d, cookie: %s, login: %s, password: %s", status, cookie, user.Login, user.Password)
-	w.WriteHeader(status)
+	log.Printf("PostRegister: %d, cookie: %s, login: %s, password: %s", http.StatusOK, cookie, user.Login, user.Password)
+	w.WriteHeader(http.StatusOK)
 }
 
 func (c *Controller) PostLogin(w http.ResponseWriter, r *http.Request) {

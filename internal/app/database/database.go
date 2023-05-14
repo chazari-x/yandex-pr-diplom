@@ -80,7 +80,7 @@ var (
 	dbAuthorization = `SELECT cookie FROM users WHERE login = $1 AND password = $2`
 	dbGetLogin      = `SELECT login FROM users WHERE cookie = $1`
 	dbGetBalance    = `SELECT login, current, withdrawn FROM users WHERE cookie = $1`
-	dbChangeCookie  = `UPDATE users SET cookie = NULL WHERE cookie = $1`
+	dbDellCookie    = `UPDATE users SET cookie = NULL WHERE cookie = $1`
 	dbSetCookie     = `UPDATE users SET cookie = $1 WHERE login = $2 AND password = $3`
 	dbSetBalance    = `UPDATE users SET current = $1, withdrawn = $2 WHERE cookie = $3`
 
@@ -134,11 +134,21 @@ func StartDB(c config.Config) (*DataBase, error) {
 func (db *DataBase) Register(login, pass, cookie string) error {
 	exec, err := db.DB.Exec(dbRegistration, login, pass, cookie)
 	if err != nil {
-		if strings.Contains(err.Error(), "duplicate key value violates unique constraint \"users_cookie_key\"") {
-			return db.Err.Duplicate
+		if !strings.Contains(err.Error(), "duplicate key value violates unique constraint \"users_cookie_key\"") {
+			return err
 		}
 
-		return err
+		_, err = db.DB.Exec(dbDellCookie, cookie)
+		if err != nil {
+			return err
+		}
+
+		_, err = db.DB.Exec(dbRegistration, login, pass, cookie)
+		if err != nil {
+			return err
+		}
+
+		return nil
 	}
 
 	affected, err := exec.RowsAffected()
@@ -166,7 +176,7 @@ func (db *DataBase) Login(login, pass, cookie string) error {
 	}
 
 	if cookieDB != cookie {
-		if _, err := db.DB.Exec(dbChangeCookie, cookie); err != nil {
+		if _, err := db.DB.Exec(dbDellCookie, cookie); err != nil {
 			return err
 		}
 
