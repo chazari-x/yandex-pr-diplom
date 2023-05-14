@@ -42,34 +42,37 @@ type WithDraw struct {
 
 var (
 	dbCreateUsersTable = `CREATE TABLE IF NOT EXISTS users (
-							uid				VARCHAR PRIMARY KEY NOT NULL,
+							id				SERIAL  PRIMARY KEY NOT NULL,
 							login			VARCHAR UNIQUE		NOT NULL, 
 							password		VARCHAR 			NOT NULL, 
+							cookie			VARCHAR UNIQUE		NULL,
 							current			INTEGER 			NOT NULL	DEFAULT 0, 
 							withdraw		INTEGER 			NOT NULL	DEFAULT 0)`
 
 	dbCreateOrdersTable = `CREATE TABLE IF NOT EXISTS orders (
-							uid 			VARCHAR PRIMARY KEY NOT NULL, 
+							login 			VARCHAR PRIMARY KEY NOT NULL, 
 							number 			VARCHAR UNIQUE 		NOT NULL,
 							status 			VARCHAR 			NOT NULL, 
 							accrual 		INTEGER 			NOT NULL,
 							uploaded_at 	VARCHAR				NOT NULL)`
 
 	dbCreateWithDrawTable = `CREATE TABLE IF NOT EXISTS withdraw (
-							uid 			VARCHAR	PRIMARY KEY NOT NULL,
+							login 			VARCHAR	PRIMARY KEY NOT NULL,
 							order_ 			VARCHAR 			NOT NULL,
 							sum 			INTEGER 			NOT NULL,
 							processed_at	VARCHAR 			NOT NULL)`
 
-	dbAuthorization = `SELECT uid FROM users WHERE login = $1 AND password = $2`
+	dbAuthorization = `SELECT cookie FROM users WHERE login = $1 AND password = $2`
+	dbChangeCookie  = `UPDATE users SET cookie = NULL WHERE cookie = $1`
+	dbSetCookie     = `UPDATE users SET cookie = $1 WHERE login = $2 AND password = $3`
 
-	dbRegistration = `INSERT INTO users (uid, login, password) VALUES ($1, $2, $3) ON CONFLICT(login) DO NOTHING`
+	dbRegistration = `INSERT INTO users (login, password, cookie) VALUES ($1, $2, $3) ON CONFLICT(login) DO NOTHING`
 )
 
 var (
 	ErrRegisterConflict = errors.New("register conflict")
 	ErrEmpty            = errors.New("empty")
-	ErrDuplicateIdent   = errors.New("duplicate identification")
+	ErrDuplicateIdent   = errors.New("duplicate cookie")
 )
 
 func StartDB(c config.Config) (*DataBase, error) {
@@ -103,10 +106,10 @@ func StartDB(c config.Config) (*DataBase, error) {
 	return &DataBase{DB: db}, nil
 }
 
-func (db *DataBase) Register(login, pass, uid string) error {
-	exec, err := db.DB.Exec(dbRegistration, uid, login, pass)
+func (db *DataBase) Register(login, pass, cookie string) error {
+	exec, err := db.DB.Exec(dbRegistration, login, pass, cookie)
 	if err != nil {
-		if strings.Contains(err.Error(), "duplicate key value violates unique constraint \"users_pkey\"") {
+		if strings.Contains(err.Error(), "duplicate key value violates unique constraint \"users_cookie_key\"") {
 			return ErrDuplicateIdent
 		}
 
@@ -125,17 +128,31 @@ func (db *DataBase) Register(login, pass, uid string) error {
 	return nil
 }
 
-func (db *DataBase) Login(login, pass string) (string, error) {
-	var uid string
+func (db *DataBase) Login(login, pass, cookie string) error {
+	var cookieDB string
 
-	err := db.DB.QueryRow(dbAuthorization, login, pass).Scan(&uid)
+	err := db.DB.QueryRow(dbAuthorization, login, pass).Scan(&cookieDB)
 	if err != nil {
-		if !errors.Is(err, sql.ErrNoRows) {
-			return "", err
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrEmpty
 		}
 
-		return "", ErrEmpty
+		if !strings.Contains(err.Error(), "name \"cookie\": converting NULL to string is unsupported") {
+			return err
+		}
 	}
 
-	return uid, nil
+	if cookieDB != cookie {
+		_, err = db.DB.Exec(dbChangeCookie, cookie)
+		if err != nil {
+			return err
+		}
+
+		_, err = db.DB.Exec(dbSetCookie, cookie, login, pass)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

@@ -219,7 +219,7 @@ func (c *Controller) Register(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 
-		if !strings.Contains(err.Error(), "duplicate identification") {
+		if !strings.Contains(err.Error(), "duplicate cookie") {
 			log.Printf("register: %s, login: %s, password: %s", err, user.Login, user.Password)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
@@ -233,7 +233,7 @@ func (c *Controller) Register(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	log.Printf("register: %d, id: %s, login: %s, password: %s", status, uid, user.Login, user.Password)
+	log.Printf("register: %d, cookie: %s, login: %s, password: %s", status, uid, user.Login, user.Password)
 	w.WriteHeader(status)
 }
 
@@ -265,7 +265,7 @@ func (c *Controller) Login(w http.ResponseWriter, r *http.Request) {
 
 	var status = http.StatusOK
 
-	dbUID, err := c.db.Login(user.Login, user.Password)
+	err = c.db.Login(user.Login, user.Password, uid)
 	if err != nil {
 		if !strings.Contains(err.Error(), "empty") {
 			log.Printf("login: %s, login: %s, password: %s", err, user.Login, user.Password)
@@ -276,20 +276,6 @@ func (c *Controller) Login(w http.ResponseWriter, r *http.Request) {
 		status = http.StatusUnauthorized
 	}
 
-	if dbUID != "" && dbUID != uid {
-		http.SetCookie(w, &http.Cookie{
-			Name:     userIdentification,
-			Value:    dbUID,
-			Path:     "/",
-			MaxAge:   3600,
-			HttpOnly: false,
-			Secure:   false,
-			SameSite: http.SameSiteLaxMode,
-		})
-
-		uid = dbUID
-	}
-
-	log.Printf("login: %d, id: %s, login: %s, password: %s", status, uid, user.Login, user.Password)
+	log.Printf("login: %d, cookie: %s, login: %s, password: %s", status, uid, user.Login, user.Password)
 	w.WriteHeader(status)
 }
