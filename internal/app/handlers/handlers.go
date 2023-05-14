@@ -327,25 +327,33 @@ func (c *Controller) PostOrders(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var status = http.StatusAccepted
 	err = c.db.AddOrder(cookie, order)
 	if err != nil {
-		switch err {
-		case c.db.Err.NoAuthorization:
-			status = http.StatusUnauthorized
-		case c.db.Err.Duplicate:
-			status = http.StatusOK
-		case c.db.Err.Used:
-			status = http.StatusConflict
-		default:
-			log.Print("PostOrders: add order err: ", err)
-			w.WriteHeader(http.StatusInternalServerError)
+		if errors.Is(err, c.db.Err.NoAuthorization) {
+			log.Printf("PostOrders: %d, cookie: %s, order: %d", http.StatusUnauthorized, cookie, order)
+			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
+
+		if errors.Is(err, c.db.Err.Duplicate) {
+			log.Printf("PostOrders: %d, cookie: %s, order: %d", http.StatusOK, cookie, order)
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		if errors.Is(err, c.db.Err.Used) {
+			log.Printf("PostOrders: %d, cookie: %s, order: %d", http.StatusConflict, cookie, order)
+			w.WriteHeader(http.StatusConflict)
+			return
+		}
+
+		log.Print("PostOrders: add order err: ", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 
-	log.Printf("PostOrders: %d, cookie: %s, order: %d", status, cookie, order)
-	w.WriteHeader(status)
+	log.Printf("PostOrders: %d, cookie: %s, order: %d", http.StatusAccepted, cookie, order)
+	w.WriteHeader(http.StatusAccepted)
 }
 
 func (c *Controller) GetOrders(w http.ResponseWriter, r *http.Request) {
@@ -355,11 +363,10 @@ func (c *Controller) GetOrders(w http.ResponseWriter, r *http.Request) {
 
 	orders, err := c.db.GetOrders(cookie)
 	if err != nil {
-		if !errors.Is(err, c.db.Err.NoAuthorization) {
-			log.Print("GetOrders: add order err: ", err)
-			w.WriteHeader(http.StatusInternalServerError)
+		if errors.Is(err, c.db.Err.NoAuthorization) {
+			log.Printf("GetOrders: %d, cookie: %s", http.StatusUnauthorized, cookie)
+			w.WriteHeader(http.StatusUnauthorized)
 			return
-
 		}
 
 		if errors.Is(err, c.db.Err.Empty) {
@@ -368,7 +375,8 @@ func (c *Controller) GetOrders(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		w.WriteHeader(http.StatusUnauthorized)
+		log.Printf("GetOrders: %d, cookie: %s", err, cookie)
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
@@ -396,13 +404,14 @@ func (c *Controller) GetBalance(w http.ResponseWriter, r *http.Request) {
 
 	balance, err := c.db.GetBalance(cookie)
 	if err != nil {
-		if !errors.Is(err, c.db.Err.NoAuthorization) {
-			log.Print("GetBalance: get balance err: ", err)
-			w.WriteHeader(http.StatusInternalServerError)
+		if errors.Is(err, c.db.Err.NoAuthorization) {
+			log.Printf("GetBalance: %d, cookie: %s, current: %d, withdrawn: %d", http.StatusUnauthorized, cookie, balance.Current, balance.WithDraw)
+			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
 
-		w.WriteHeader(http.StatusUnauthorized)
+		log.Printf("GetBalance: %d, cookie: %s, current: %d, withdrawn: %d", err, cookie, balance.Current, balance.WithDraw)
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
@@ -453,12 +462,11 @@ func (c *Controller) PostWithDraw(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var status = http.StatusOK
 	err = c.db.AddWithDraw(cookie, withdraw.Order, withdraw.Sum)
 	if err != nil {
-		if !errors.Is(err, c.db.Err.NoAuthorization) {
-			log.Printf("PostWithDraw: %s, cookie: %s, order: %s, sum: %d", err, cookie, withdraw.Order, withdraw.Sum)
-			w.WriteHeader(http.StatusInternalServerError)
+		if errors.Is(err, c.db.Err.NoAuthorization) {
+			log.Printf("PostWithDraw: %d, cookie: %s, order: %s, sum: %d", http.StatusUnauthorized, cookie, withdraw.Order, withdraw.Sum)
+			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
 
@@ -468,11 +476,13 @@ func (c *Controller) PostWithDraw(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		status = http.StatusUnauthorized
+		log.Printf("PostWithDraw: %s, cookie: %s, order: %s, sum: %d", err, cookie, withdraw.Order, withdraw.Sum)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 
-	log.Printf("PostWithDraw: %d, cookie: %s, order: %s, sum: %d", status, cookie, withdraw.Order, withdraw.Sum)
-	w.WriteHeader(status)
+	log.Printf("PostWithDraw: %d, cookie: %s, order: %s, sum: %d", http.StatusOK, cookie, withdraw.Order, withdraw.Sum)
+	w.WriteHeader(http.StatusOK)
 }
 
 func (c *Controller) GetWithDrawAls(w http.ResponseWriter, r *http.Request) {
@@ -482,11 +492,9 @@ func (c *Controller) GetWithDrawAls(w http.ResponseWriter, r *http.Request) {
 
 	withdraw, err := c.db.GetWithDraw(cookie)
 	if err != nil {
-		if !errors.Is(err, c.db.Err.NoAuthorization) {
-			log.Print("GetWithDraw: add order err: ", err)
-			w.WriteHeader(http.StatusInternalServerError)
+		if errors.Is(err, c.db.Err.NoAuthorization) {
+			w.WriteHeader(http.StatusUnauthorized)
 			return
-
 		}
 
 		if errors.Is(err, c.db.Err.Empty) {
@@ -495,7 +503,8 @@ func (c *Controller) GetWithDrawAls(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		w.WriteHeader(http.StatusUnauthorized)
+		log.Print("GetWithDraw: add order err: ", err)
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 

@@ -47,10 +47,10 @@ type Order struct {
 }
 
 type WithDraw struct {
-	OrderID     string `json:"order_id,omitempty"`
+	OrderID     string `json:"order_id"`
 	Login       string `json:"login,omitempty"`
-	Sum         int    `json:"sum,omitempty"`
-	ProcessedAt string `json:"processed_at,omitempty"`
+	Sum         int    `json:"sum"`
+	ProcessedAt string `json:"processed_at"`
 }
 
 var (
