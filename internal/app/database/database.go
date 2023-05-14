@@ -20,11 +20,11 @@ type DataBase struct {
 }
 
 type errs struct {
-	ErrRegisterConflict error
-	ErrEmpty            error
-	ErrDuplicate        error
-	ErrNoAuthorization  error
-	ErrUsed             error
+	RegisterConflict error
+	Empty            error
+	Duplicate        error
+	NoAuthorization  error
+	Used             error
 }
 
 //type users struct {
@@ -45,8 +45,8 @@ type errs struct {
 //}
 //
 //type withdraw struct {
-//	Login       string `json:"login"`
 //	OrderID     string `json:"order_id"`
+//	Login       string `json:"login"`
 //	Sum         int    `json:"sum"`
 //	ProcessedAt string `json:"processed_at"`
 //}
@@ -68,8 +68,8 @@ var (
 							uploaded_at 	VARCHAR				NOT NULL)`
 
 	dbCreateWithDrawTable = `CREATE TABLE IF NOT EXISTS withdraw (
-							login 			VARCHAR	PRIMARY KEY NOT NULL,
-							orderID 		VARCHAR 			NOT NULL,
+							orderID 		VARCHAR PRIMARY KEY NOT NULL,
+							login 			VARCHAR 			NOT NULL,
 							sum 			INTEGER 			NOT NULL,
 							processed_at	VARCHAR 			NOT NULL)`
 
@@ -83,14 +83,6 @@ var (
 	// Таблица заказов orders:
 	dbAddOrder      = `INSERT INTO orders (number, login, uploaded_at) VALUES ($1, $2, $3) ON CONFLICT(number) DO NOTHING`
 	dbGetOrderLogin = `SELECT login FROM orders WHERE number = $1`
-)
-
-var (
-	ErrUsed             = errors.New("used")
-	ErrEmpty            = errors.New("empty")
-	ErrDuplicate        = errors.New("duplicate")
-	ErrNoAuthorization  = errors.New("no authorization")
-	ErrRegisterConflict = errors.New("register conflict")
 )
 
 func StartDB(c config.Config) (*DataBase, error) {
@@ -122,11 +114,11 @@ func StartDB(c config.Config) (*DataBase, error) {
 	}
 
 	var errs errs
-	errs.ErrUsed = ErrUsed
-	errs.ErrEmpty = ErrEmpty
-	errs.ErrDuplicate = ErrDuplicate
-	errs.ErrNoAuthorization = ErrNoAuthorization
-	errs.ErrRegisterConflict = ErrRegisterConflict
+	errs.Used = errors.New("used")
+	errs.Empty = errors.New("empty")
+	errs.Duplicate = errors.New("duplicate")
+	errs.NoAuthorization = errors.New("no authorization")
+	errs.RegisterConflict = errors.New("register conflict")
 
 	return &DataBase{DB: db, Err: errs}, nil
 }
@@ -135,7 +127,7 @@ func (db *DataBase) Register(login, pass, cookie string) error {
 	exec, err := db.DB.Exec(dbRegistration, login, pass, cookie)
 	if err != nil {
 		if strings.Contains(err.Error(), "duplicate key value violates unique constraint \"users_cookie_key\"") {
-			return ErrDuplicate
+			return db.Err.Duplicate
 		}
 
 		return err
@@ -147,7 +139,7 @@ func (db *DataBase) Register(login, pass, cookie string) error {
 	}
 
 	if affected == 0 {
-		return ErrRegisterConflict
+		return db.Err.RegisterConflict
 	}
 
 	return nil
@@ -159,7 +151,7 @@ func (db *DataBase) Login(login, pass, cookie string) error {
 	err := db.DB.QueryRow(dbAuthorization, login, pass).Scan(&cookieDB)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return ErrEmpty
+			return db.Err.Empty
 		}
 
 		if !strings.Contains(err.Error(), "name \"cookie\": converting NULL to string is unsupported") {
@@ -191,7 +183,7 @@ func (db *DataBase) AddOrder(cookie string, order int) error {
 			return err
 		}
 
-		return ErrNoAuthorization
+		return db.Err.NoAuthorization
 	}
 
 	exec, err := db.DB.Exec(dbAddOrder, order, login, time.Now().String())
@@ -213,10 +205,10 @@ func (db *DataBase) AddOrder(cookie string, order int) error {
 		}
 
 		if orderLogin != login {
-			return ErrUsed
+			return db.Err.Used
 		}
 
-		return ErrDuplicate
+		return db.Err.Duplicate
 	}
 
 	return nil

@@ -214,12 +214,12 @@ func (c *Controller) PostRegister(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 
-		if errors.Is(err, c.db.Err.ErrRegisterConflict) {
+		if errors.Is(err, c.db.Err.RegisterConflict) {
 			status = http.StatusConflict
 			break
 		}
 
-		if !errors.Is(err, c.db.Err.ErrDuplicate) {
+		if !errors.Is(err, c.db.Err.Duplicate) {
 			log.Printf("register: %s, login: %s, password: %s", err, user.Login, user.Password)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
@@ -267,7 +267,7 @@ func (c *Controller) PostLogin(w http.ResponseWriter, r *http.Request) {
 
 	err = c.db.Login(user.Login, user.Password, cookie)
 	if err != nil {
-		if !errors.Is(err, c.db.Err.ErrEmpty) {
+		if !errors.Is(err, c.db.Err.Empty) {
 			log.Printf("login: %s, login: %s, password: %s", err, user.Login, user.Password)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
@@ -310,11 +310,11 @@ func (c *Controller) PostOrders(w http.ResponseWriter, r *http.Request) {
 
 	err = c.db.AddOrder(cookie, order)
 	if err != nil {
-		if errors.Is(err, c.db.Err.ErrNoAuthorization) {
+		if errors.Is(err, c.db.Err.NoAuthorization) {
 			status = http.StatusUnauthorized
-		} else if errors.Is(err, c.db.Err.ErrDuplicate) {
+		} else if errors.Is(err, c.db.Err.Duplicate) {
 			status = http.StatusOK
-		} else if errors.Is(err, c.db.Err.ErrUsed) {
+		} else if errors.Is(err, c.db.Err.Used) {
 			status = http.StatusConflict
 		} else {
 			log.Print("PostOrders: add order err: ", err)
