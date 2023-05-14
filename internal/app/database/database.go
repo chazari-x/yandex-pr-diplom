@@ -238,5 +238,9 @@ func (db *DataBase) GetOrders(cookie string) ([]Order, error) {
 		orders = append(orders, order)
 	}
 
+	if rows.Err() != nil {
+		return nil, err
+	}
+
 	return orders, nil
 }
