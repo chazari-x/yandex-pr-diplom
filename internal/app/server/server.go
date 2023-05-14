@@ -33,7 +33,7 @@ func StartServer() error {
 	r.Post("/api/user/orders", c.PostOrders)
 	//загрузка пользователем номера заказа для расчета
 
-	//r.Get	("/api/user/orders", c.GetOrders)
+	r.Get("/api/user/orders", c.GetOrders)
 	//получение списка загруженные пользователем номеров заказов, статусов их обработки и информации о начислениях
 
 	//r.Get	("/api/user/balance", c.GetBalance)

@@ -27,29 +27,29 @@ type errs struct {
 	Used             error
 }
 
-//type users struct {
-//	UserID   string `json:"user_id"`
-//	Login    string `json:"login"`
-//	Password string `json:"password"`
-//	Cookie   string `json:"cookie"`
-//	Current  int    `json:"current"`
-//	WithDraw int    `json:"withdraw"`
-//}
-//
-//type orders struct {
-//	Number     string `json:"number"`
-//	Login      string `json:"login"`
-//	Status     string `json:"status"`
-//	Accrual    int    `json:"accrual"`
-//	UploadedAt string `json:"uploaded_at"`
-//}
-//
-//type withdraw struct {
-//	OrderID     string `json:"order_id"`
-//	Login       string `json:"login"`
-//	Sum         int    `json:"sum"`
-//	ProcessedAt string `json:"processed_at"`
-//}
+type User struct {
+	UserID   string `json:"user_id"`
+	Login    string `json:"login"`
+	Password string `json:"password"`
+	Cookie   string `json:"cookie,omitempty"`
+	Current  int    `json:"current"`
+	WithDraw int    `json:"withdraw"`
+}
+
+type Order struct {
+	Number     string `json:"number"`
+	Login      string `json:"login"`
+	Status     string `json:"status"`
+	Accrual    int    `json:"accrual,omitempty"`
+	UploadedAt string `json:"uploaded_at"`
+}
+
+type WithDraw struct {
+	OrderID     string `json:"order_id"`
+	Login       string `json:"login"`
+	Sum         int    `json:"sum"`
+	ProcessedAt string `json:"processed_at"`
+}
 
 var (
 	dbCreateUsersTable = `CREATE TABLE IF NOT EXISTS users (
@@ -60,7 +60,7 @@ var (
 							current			INTEGER 			NOT NULL	DEFAULT 0, 
 							withdraw		INTEGER 			NOT NULL	DEFAULT 0)`
 
-	dbCreateOrdersTable = `CREATE TABLE IF NOT EXISTS orders (
+	dbCreateOrdersTable = `CREATE TABLE IF NOT EXISTS Orders (
 							number 			VARCHAR PRIMARY KEY NOT NULL,
 							login 			VARCHAR 			NOT NULL,
 							status 			VARCHAR 			NOT NULL	DEFAULT 'NEW', 
@@ -81,8 +81,9 @@ var (
 	dbGetLogin      = `SELECT login FROM users WHERE cookie = $1`
 
 	// Таблица заказов orders:
-	dbAddOrder      = `INSERT INTO orders (number, login, uploaded_at) VALUES ($1, $2, $3) ON CONFLICT(number) DO NOTHING`
-	dbGetOrderLogin = `SELECT login FROM orders WHERE number = $1`
+	dbAddOrder      = `INSERT INTO Orders (number, login, uploaded_at) VALUES ($1, $2, $3) ON CONFLICT(number) DO NOTHING`
+	dbGerOrders     = `SELECT number, status, accrual, uploaded_at FROM orders WHERE login = $1`
+	dbGetOrderLogin = `SELECT login FROM Orders WHERE number = $1`
 )
 
 func StartDB(c config.Config) (*DataBase, error) {
@@ -98,18 +99,15 @@ func StartDB(c config.Config) (*DataBase, error) {
 		return nil, err
 	}
 
-	_, err = db.Exec(dbCreateUsersTable)
-	if err != nil {
+	if _, err = db.Exec(dbCreateUsersTable); err != nil {
 		return nil, err
 	}
 
-	_, err = db.Exec(dbCreateOrdersTable)
-	if err != nil {
+	if _, err = db.Exec(dbCreateOrdersTable); err != nil {
 		return nil, err
 	}
 
-	_, err = db.Exec(dbCreateWithDrawTable)
-	if err != nil {
+	if _, err = db.Exec(dbCreateWithDrawTable); err != nil {
 		return nil, err
 	}
 
@@ -147,9 +145,7 @@ func (db *DataBase) Register(login, pass, cookie string) error {
 
 func (db *DataBase) Login(login, pass, cookie string) error {
 	var cookieDB string
-
-	err := db.DB.QueryRow(dbAuthorization, login, pass).Scan(&cookieDB)
-	if err != nil {
+	if err := db.DB.QueryRow(dbAuthorization, login, pass).Scan(&cookieDB); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return db.Err.Empty
 		}
@@ -160,13 +156,11 @@ func (db *DataBase) Login(login, pass, cookie string) error {
 	}
 
 	if cookieDB != cookie {
-		_, err = db.DB.Exec(dbChangeCookie, cookie)
-		if err != nil {
+		if _, err := db.DB.Exec(dbChangeCookie, cookie); err != nil {
 			return err
 		}
 
-		_, err = db.DB.Exec(dbSetCookie, cookie, login, pass)
-		if err != nil {
+		if _, err := db.DB.Exec(dbSetCookie, cookie, login, pass); err != nil {
 			return err
 		}
 	}
@@ -176,9 +170,7 @@ func (db *DataBase) Login(login, pass, cookie string) error {
 
 func (db *DataBase) AddOrder(cookie string, order int) error {
 	var login string
-
-	err := db.DB.QueryRow(dbGetLogin, cookie).Scan(&login)
-	if err != nil {
+	if err := db.DB.QueryRow(dbGetLogin, cookie).Scan(&login); err != nil {
 		if !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
@@ -198,9 +190,7 @@ func (db *DataBase) AddOrder(cookie string, order int) error {
 
 	if affected == 0 {
 		var orderLogin string
-
-		err = db.DB.QueryRow(dbGetOrderLogin, order).Scan(&orderLogin)
-		if err != nil {
+		if err = db.DB.QueryRow(dbGetOrderLogin, order).Scan(&orderLogin); err != nil {
 			return err
 		}
 
@@ -212,4 +202,41 @@ func (db *DataBase) AddOrder(cookie string, order int) error {
 	}
 
 	return nil
+}
+
+func (db *DataBase) GetOrders(cookie string) ([]Order, error) {
+	var login string
+	if err := db.DB.QueryRow(dbGetLogin, cookie).Scan(&login); err != nil {
+		if !errors.Is(err, sql.ErrNoRows) {
+			return nil, err
+		}
+
+		return nil, db.Err.NoAuthorization
+	}
+
+	rows, err := db.DB.Query(dbGerOrders, login)
+	if err != nil {
+		if !errors.Is(err, sql.ErrNoRows) {
+			return nil, err
+		}
+	}
+
+	var orders []Order
+	for rows.Next() {
+		var order Order
+		var accrual sql.NullInt64
+		if err = rows.Scan(&order.Number, &order.Status, &accrual, &order.UploadedAt); err != nil {
+			if !errors.Is(err, sql.ErrNoRows) {
+				return nil, err
+			}
+
+			if accrual.Valid {
+				order.Accrual = int(accrual.Int64)
+			}
+		}
+
+		orders = append(orders, order)
+	}
+
+	return orders, nil
 }

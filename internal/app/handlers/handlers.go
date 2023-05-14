@@ -218,7 +218,6 @@ func (c *Controller) PostRegister(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user := userStruct{}
-
 	err = json.Unmarshal(b, &user)
 	if err != nil {
 		log.Print("PostRegister: json unmarshal err: ", err)
@@ -227,7 +226,6 @@ func (c *Controller) PostRegister(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var status = http.StatusOK
-
 	for i := 0; i < 2; i++ {
 		err = c.db.Register(user.Login, user.Password, cookie)
 		if err == nil {
@@ -240,7 +238,7 @@ func (c *Controller) PostRegister(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if !errors.Is(err, c.db.Err.Duplicate) {
-			log.Printf("register: %s, login: %s, password: %s", err, user.Login, user.Password)
+			log.Printf("PostRegister: %s, login: %s, password: %s", err, user.Login, user.Password)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -253,7 +251,7 @@ func (c *Controller) PostRegister(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	log.Printf("register: %d, cookie: %s, login: %s, password: %s", status, cookie, user.Login, user.Password)
+	log.Printf("PostRegister: %d, cookie: %s, login: %s, password: %s", status, cookie, user.Login, user.Password)
 	w.WriteHeader(status)
 }
 
@@ -275,7 +273,6 @@ func (c *Controller) PostLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user := userStruct{}
-
 	err = json.Unmarshal(b, &user)
 	if err != nil {
 		log.Print("PostLogin: json unmarshal err: ", err)
@@ -284,11 +281,10 @@ func (c *Controller) PostLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var status = http.StatusOK
-
 	err = c.db.Login(user.Login, user.Password, cookie)
 	if err != nil {
 		if !errors.Is(err, c.db.Err.Empty) {
-			log.Printf("login: %s, login: %s, password: %s", err, user.Login, user.Password)
+			log.Printf("PostLogin: %s, login: %s, password: %s", err, user.Login, user.Password)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -296,7 +292,7 @@ func (c *Controller) PostLogin(w http.ResponseWriter, r *http.Request) {
 		status = http.StatusUnauthorized
 	}
 
-	log.Printf("login: %d, cookie: %s, login: %s, password: %s", status, cookie, user.Login, user.Password)
+	log.Printf("PostLogin: %d, cookie: %s, login: %s, password: %s", status, cookie, user.Login, user.Password)
 	w.WriteHeader(status)
 }
 
@@ -318,7 +314,6 @@ func (c *Controller) PostOrders(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var order int
-
 	err = json.Unmarshal(b, &order)
 	if err != nil {
 		log.Print("PostOrders: json unmarshal err: ", err)
@@ -327,28 +322,69 @@ func (c *Controller) PostOrders(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !checkOrderNumber(order) {
-		log.Printf("orders: %d, cookie: %s, order: %d", 422, cookie, order)
+		log.Printf("PostOrders: %d, cookie: %s, order: %d", 422, cookie, order)
 		w.WriteHeader(http.StatusUnprocessableEntity)
 		return
 	}
 
 	var status = http.StatusAccepted
-
 	err = c.db.AddOrder(cookie, order)
 	if err != nil {
-		if errors.Is(err, c.db.Err.NoAuthorization) {
+		switch err {
+		case c.db.Err.NoAuthorization:
 			status = http.StatusUnauthorized
-		} else if errors.Is(err, c.db.Err.Duplicate) {
+		case c.db.Err.Duplicate:
 			status = http.StatusOK
-		} else if errors.Is(err, c.db.Err.Used) {
+		case c.db.Err.Used:
 			status = http.StatusConflict
-		} else {
+		default:
 			log.Print("PostOrders: add order err: ", err)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 	}
 
-	log.Printf("orders: %d, cookie: %s, order: %d", status, cookie, order)
+	log.Printf("PostOrders: %d, cookie: %s, order: %d", status, cookie, order)
 	w.WriteHeader(status)
+}
+
+func (c *Controller) GetOrders(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	cookie := fmt.Sprintf("%v", r.Context().Value(identification))
+
+	orders, err := c.db.GetOrders(cookie)
+	if err != nil {
+		if !errors.Is(err, c.db.Err.NoAuthorization) {
+			log.Print("GetOrders: add order err: ", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+
+		}
+
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	if orders == nil {
+		log.Printf("GetOrders: %d, cookie: %s", http.StatusNoContent, cookie)
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	marshal, err := json.Marshal(orders)
+	if err != nil {
+		log.Print("GetOrders: json marshal err: ", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	_, err = w.Write(marshal)
+	if err != nil {
+		log.Print("GetOrders: w write err: ", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("GetOrders: %d, cookie: %s", http.StatusOK, cookie)
 }
