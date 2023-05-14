@@ -36,14 +36,17 @@ func StartServer() error {
 	r.Get("/api/user/orders", c.GetOrders)
 	//получение списка загруженные пользователем номеров заказов, статусов их обработки и информации о начислениях
 
-	//r.Get	("/api/user/balance", c.GetBalance)
+	r.Get("/api/user/balance", c.GetBalance)
 	//получение текущего баланса счета баллов лояльности пользователя
 
-	//r.Post("/api/user/balance/withdraw", c.PostWithDraw)
+	r.Post("/api/user/balance/withdraw", c.PostWithDraw)
 	//запрос на списание баллов с накопительного счета в счет оплаты нового заказа
 
-	//r.Get	("/api/user/withdrawals", c.GetWithDrawAls)
+	r.Get("/api/user/withdrawals", c.GetWithDrawAls)
 	//получение информации о выводе средств накопительного счета пользователем
+
+	//r.Get	("/api/orders/{number}", c.GetOrdersNumber)
+	//взаимодействие с системой расчёта начислений баллов лояльности
 
 	return http.ListenAndServe(conf.RunAddress, handlers.MiddlewaresConveyor(r))
 }

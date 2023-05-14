@@ -25,30 +25,32 @@ type errs struct {
 	Duplicate        error
 	NoAuthorization  error
 	Used             error
+	NoMoney          error
+	WrongData        error
 }
 
 type User struct {
-	UserID   string `json:"user_id"`
-	Login    string `json:"login"`
-	Password string `json:"password"`
+	UserID   string `json:"user_id,omitempty"`
+	Login    string `json:"login,omitempty"`
+	Password string `json:"password,omitempty"`
 	Cookie   string `json:"cookie,omitempty"`
 	Current  int    `json:"current"`
-	WithDraw int    `json:"withdraw"`
+	WithDraw int    `json:"withdrawn"`
 }
 
 type Order struct {
 	Number     string `json:"number"`
-	Login      string `json:"login"`
+	Login      string `json:"login,omitempty"`
 	Status     string `json:"status"`
 	Accrual    int    `json:"accrual,omitempty"`
 	UploadedAt string `json:"uploaded_at"`
 }
 
 type WithDraw struct {
-	OrderID     string `json:"order_id"`
-	Login       string `json:"login"`
-	Sum         int    `json:"sum"`
-	ProcessedAt string `json:"processed_at"`
+	OrderID     string `json:"order_id,omitempty"`
+	Login       string `json:"login,omitempty"`
+	Sum         int    `json:"sum,omitempty"`
+	ProcessedAt string `json:"processed_at,omitempty"`
 }
 
 var (
@@ -58,7 +60,7 @@ var (
 							password		VARCHAR 			NOT NULL, 
 							cookie			VARCHAR UNIQUE		NULL,
 							current			INTEGER 			NOT NULL	DEFAULT 0, 
-							withdraw		INTEGER 			NOT NULL	DEFAULT 0)`
+							withdrawn		INTEGER 			NOT NULL	DEFAULT 0)`
 
 	dbCreateOrdersTable = `CREATE TABLE IF NOT EXISTS Orders (
 							number 			VARCHAR PRIMARY KEY NOT NULL,
@@ -76,14 +78,20 @@ var (
 	// Таблица пользователей users:
 	dbRegistration  = `INSERT INTO users (login, password, cookie) VALUES ($1, $2, $3) ON CONFLICT(login) DO NOTHING`
 	dbAuthorization = `SELECT cookie FROM users WHERE login = $1 AND password = $2`
+	dbGetLogin      = `SELECT login FROM users WHERE cookie = $1`
+	dbGetBalance    = `SELECT login, current, withdrawn FROM users WHERE cookie = $1`
 	dbChangeCookie  = `UPDATE users SET cookie = NULL WHERE cookie = $1`
 	dbSetCookie     = `UPDATE users SET cookie = $1 WHERE login = $2 AND password = $3`
-	dbGetLogin      = `SELECT login FROM users WHERE cookie = $1`
+	dbSetBalance    = `UPDATE users SET current = $1, withdrawn = $2 WHERE cookie = $3`
 
 	// Таблица заказов orders:
-	dbAddOrder      = `INSERT INTO Orders (number, login, uploaded_at) VALUES ($1, $2, $3) ON CONFLICT(number) DO NOTHING`
+	dbAddOrder      = `INSERT INTO orders (number, login, uploaded_at) VALUES ($1, $2, $3) ON CONFLICT(number) DO NOTHING`
 	dbGerOrders     = `SELECT number, status, accrual, uploaded_at FROM orders WHERE login = $1`
-	dbGetOrderLogin = `SELECT login FROM Orders WHERE number = $1`
+	dbGetOrderLogin = `SELECT login FROM orders WHERE number = $1`
+
+	// Таблица операций withdraw:
+	dbAddWithDraw = `INSERT INTO withdraw VALUES ($1, $2, $3, $4) ON CONFLICT(orderID) DO NOTHING`
+	dbGetWithDraw = `SELECT orderID, sum, processed_at FROM withdraw WHERE login = $1`
 )
 
 func StartDB(c config.Config) (*DataBase, error) {
@@ -117,6 +125,8 @@ func StartDB(c config.Config) (*DataBase, error) {
 	errs.Duplicate = errors.New("duplicate")
 	errs.NoAuthorization = errors.New("no authorization")
 	errs.RegisterConflict = errors.New("register conflict")
+	errs.NoMoney = errors.New("no money")
+	errs.WrongData = errors.New("wrong data")
 
 	return &DataBase{DB: db, Err: errs}, nil
 }
@@ -147,7 +157,7 @@ func (db *DataBase) Login(login, pass, cookie string) error {
 	var cookieDB string
 	if err := db.DB.QueryRow(dbAuthorization, login, pass).Scan(&cookieDB); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return db.Err.Empty
+			return db.Err.WrongData
 		}
 
 		if !strings.Contains(err.Error(), "name \"cookie\": converting NULL to string is unsupported") {
@@ -178,7 +188,7 @@ func (db *DataBase) AddOrder(cookie string, order int) error {
 		return db.Err.NoAuthorization
 	}
 
-	exec, err := db.DB.Exec(dbAddOrder, order, login, time.Now().String())
+	exec, err := db.DB.Exec(dbAddOrder, order, login, time.Now().Format(time.RFC3339))
 	if err != nil {
 		return err
 	}
@@ -242,5 +252,92 @@ func (db *DataBase) GetOrders(cookie string) ([]Order, error) {
 		return nil, err
 	}
 
+	if orders == nil {
+		return nil, db.Err.Empty
+	}
+
 	return orders, nil
+}
+
+func (db *DataBase) GetBalance(cookie string) (User, error) {
+	var balance User
+	if err := db.DB.QueryRow(dbGetBalance, cookie).Scan(&balance.Login, &balance.Current, &balance.WithDraw); err != nil {
+		if !errors.Is(err, sql.ErrNoRows) {
+			return User{}, err
+		}
+
+		return User{}, db.Err.NoAuthorization
+	}
+
+	return balance, nil
+}
+
+func (db *DataBase) AddWithDraw(cookie, order string, sum int) error {
+	var balance User
+	if err := db.DB.QueryRow(dbGetBalance, cookie).Scan(&balance.Login, &balance.Current, &balance.WithDraw); err != nil {
+		if !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+
+		return db.Err.NoAuthorization
+	}
+
+	if balance.Current < sum {
+		return db.Err.NoMoney
+	}
+
+	balance.Current -= sum
+	balance.WithDraw += sum
+
+	_, err := db.DB.Exec(dbAddWithDraw, order, balance.Login, sum, time.Now().Format(time.RFC3339))
+	if err != nil {
+		return err
+	}
+
+	_, err = db.DB.Exec(dbSetBalance, balance.Current, balance.WithDraw, cookie)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (db *DataBase) GetWithDraw(cookie string) ([]WithDraw, error) {
+	var login string
+	if err := db.DB.QueryRow(dbGetLogin, cookie).Scan(&login); err != nil {
+		if !errors.Is(err, sql.ErrNoRows) {
+			return nil, err
+		}
+
+		return nil, db.Err.NoAuthorization
+	}
+
+	rows, err := db.DB.Query(dbGetWithDraw, login)
+	if err != nil {
+		if !errors.Is(err, sql.ErrNoRows) {
+			return nil, err
+		}
+	}
+
+	var withdraw []WithDraw
+	for rows.Next() {
+		var order WithDraw
+		if err = rows.Scan(&order.OrderID, &order.Sum, &order.ProcessedAt); err != nil {
+			if !errors.Is(err, sql.ErrNoRows) {
+				return nil, err
+			}
+		}
+
+		withdraw = append(withdraw, order)
+	}
+
+	if rows.Err() != nil {
+		return nil, err
+	}
+
+	if withdraw == nil {
+		return nil, db.Err.Empty
+	}
+
+	return withdraw, nil
 }

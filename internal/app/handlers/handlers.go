@@ -283,7 +283,7 @@ func (c *Controller) PostLogin(w http.ResponseWriter, r *http.Request) {
 	var status = http.StatusOK
 	err = c.db.Login(user.Login, user.Password, cookie)
 	if err != nil {
-		if !errors.Is(err, c.db.Err.Empty) {
+		if !errors.Is(err, c.db.Err.WrongData) {
 			log.Printf("PostLogin: %s, login: %s, password: %s", err, user.Login, user.Password)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
@@ -362,13 +362,13 @@ func (c *Controller) GetOrders(w http.ResponseWriter, r *http.Request) {
 
 		}
 
-		w.WriteHeader(http.StatusUnauthorized)
-		return
-	}
+		if errors.Is(err, c.db.Err.Empty) {
+			log.Printf("GetOrders: %d, cookie: %s", http.StatusNoContent, cookie)
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
 
-	if orders == nil {
-		log.Printf("GetOrders: %d, cookie: %s", http.StatusNoContent, cookie)
-		w.WriteHeader(http.StatusNoContent)
+		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
 
@@ -387,4 +387,131 @@ func (c *Controller) GetOrders(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("GetOrders: %d, cookie: %s", http.StatusOK, cookie)
+}
+
+func (c *Controller) GetBalance(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	cookie := fmt.Sprintf("%v", r.Context().Value(identification))
+
+	balance, err := c.db.GetBalance(cookie)
+	if err != nil {
+		if !errors.Is(err, c.db.Err.NoAuthorization) {
+			log.Print("GetBalance: get balance err: ", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	marshal, err := json.Marshal(balance)
+	if err != nil {
+		log.Print("GetBalance: json marshal err: ", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	_, err = w.Write(marshal)
+	if err != nil {
+		log.Print("GetBalance: w write err: ", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("GetBalance: %d, cookie: %s, current: %d, withdrawn: %d", http.StatusOK, cookie, balance.Current, balance.WithDraw)
+}
+
+type withdraw struct {
+	Order string `json:"order"`
+	Sum   int    `json:"sum"`
+}
+
+func (c *Controller) PostWithDraw(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	cookie := fmt.Sprintf("%v", r.Context().Value(identification))
+
+	b, err := io.ReadAll(r.Body)
+	if err != nil {
+		log.Print("PostWithDraw: read all err: ", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	if string(b) == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	withdraw := withdraw{}
+	err = json.Unmarshal(b, &withdraw)
+	if err != nil {
+		log.Print("PostWithDraw: json unmarshal err: ", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	var status = http.StatusOK
+	err = c.db.AddWithDraw(cookie, withdraw.Order, withdraw.Sum)
+	if err != nil {
+		if !errors.Is(err, c.db.Err.NoAuthorization) {
+			log.Printf("PostWithDraw: %s, cookie: %s, order: %s, sum: %d", err, cookie, withdraw.Order, withdraw.Sum)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		if errors.Is(err, c.db.Err.NoMoney) {
+			log.Printf("GetWithDraw: %d, cookie: %s", http.StatusPaymentRequired, cookie)
+			w.WriteHeader(http.StatusPaymentRequired)
+			return
+		}
+
+		status = http.StatusUnauthorized
+	}
+
+	log.Printf("PostWithDraw: %d, cookie: %s, order: %s, sum: %d", status, cookie, withdraw.Order, withdraw.Sum)
+	w.WriteHeader(status)
+}
+
+func (c *Controller) GetWithDrawAls(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	cookie := fmt.Sprintf("%v", r.Context().Value(identification))
+
+	withdraw, err := c.db.GetWithDraw(cookie)
+	if err != nil {
+		if !errors.Is(err, c.db.Err.NoAuthorization) {
+			log.Print("GetWithDraw: add order err: ", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+
+		}
+
+		if errors.Is(err, c.db.Err.Empty) {
+			log.Printf("GetWithDraw: %d, cookie: %s", http.StatusNoContent, cookie)
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	marshal, err := json.Marshal(withdraw)
+	if err != nil {
+		log.Print("GetWithDraw: json marshal err: ", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	_, err = w.Write(marshal)
+	if err != nil {
+		log.Print("GetWithDraw: w write err: ", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("GetWithDraw: %d, cookie: %s", http.StatusOK, cookie)
 }
