@@ -287,7 +287,12 @@ func (db *DataBase) getOrderInfo(number string) {
 
 func (db *DataBase) newWorker(input chan string) {
 	go func() {
+		var resp *http.Response
+		var err error
+
 		defer func() {
+			resp.Body.Close()
+
 			if x := recover(); x != nil {
 				db.newWorker(input)
 				log.Print("run time panic: ", x)
@@ -295,14 +300,12 @@ func (db *DataBase) newWorker(input chan string) {
 		}()
 
 		for number := range input {
-			resp, err := http.Get("http://" + db.ASA + "/api/orders/" + number)
+			resp, err = http.Get("http://" + db.ASA + "/api/orders/" + number)
 			if err != nil {
 				input <- number
 				log.Print(err)
 				return
 			}
-
-			defer resp.Body.Close()
 
 			b, err := io.ReadAll(resp.Body)
 			if err != nil {
@@ -346,8 +349,6 @@ func (db *DataBase) newWorker(input chan string) {
 			case "500":
 				input <- number
 			}
-
-			resp.Body.Close()
 		}
 	}()
 }
