@@ -302,6 +302,8 @@ func (db *DataBase) newWorker(input chan string) {
 				return
 			}
 
+			defer resp.Body.Close()
+
 			b, err := io.ReadAll(resp.Body)
 			if err != nil {
 				input <- number
@@ -344,6 +346,8 @@ func (db *DataBase) newWorker(input chan string) {
 			case "500":
 				input <- number
 			}
+
+			resp.Body.Close()
 		}
 	}()
 }
