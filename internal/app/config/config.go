@@ -2,6 +2,7 @@ package config
 
 import (
 	"flag"
+	"log"
 
 	"github.com/caarlos0/env/v6"
 	_ "github.com/lib/pq"
@@ -47,6 +48,9 @@ func GetConfig() (Config, error) {
 	if C.AccrualSystemAddress != "" {
 		C.AccrualSystemAddress = "/" + C.AccrualSystemAddress
 	}
+
+	log.Print(*f.RunAddress, " ", *f.AccrualSystemAddress, " ", *f.DataBaseURI)
+	log.Print(C)
 
 	return C, nil
 }
