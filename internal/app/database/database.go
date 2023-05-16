@@ -10,10 +10,6 @@ import (
 	"github.com/chazari-x/yandex-pr-diplom/internal/app/config"
 )
 
-type DBStorage interface {
-	Register(login, pass string) error
-}
-
 type DataBase struct {
 	DB  *sql.DB
 	Err errs
@@ -43,7 +39,7 @@ type Order struct {
 	Login      string `json:"login,omitempty"`
 	Status     string `json:"status"`
 	Accrual    int    `json:"accrual,omitempty"`
-	UploadedAt string `json:"uploaded_at"`
+	UploadedAt string `json:"uploaded_at,omitempty"`
 }
 
 type WithDraw struct {
@@ -86,7 +82,8 @@ var (
 
 	// Таблица заказов orders:
 	dbAddOrder      = `INSERT INTO orders (number, login, uploaded_at) VALUES ($1, $2, $3) ON CONFLICT(number) DO NOTHING`
-	dbGerOrders     = `SELECT number, status, accrual, uploaded_at FROM orders WHERE login = $1`
+	dbGetOrders     = `SELECT number, status, accrual, uploaded_at FROM orders WHERE login = $1`
+	dbGetOrder      = `SELECT status, accrual FROM orders WHERE number = $1`
 	dbGetOrderLogin = `SELECT login FROM orders WHERE number = $1`
 
 	// Таблица операций withdraw:
@@ -234,7 +231,7 @@ func (db *DataBase) GetOrders(cookie string) ([]Order, error) {
 		return nil, db.Err.NoAuthorization
 	}
 
-	rows, err := db.DB.Query(dbGerOrders, login)
+	rows, err := db.DB.Query(dbGetOrders, login)
 	if err != nil {
 		if !errors.Is(err, sql.ErrNoRows) {
 			return nil, err
@@ -267,6 +264,29 @@ func (db *DataBase) GetOrders(cookie string) ([]Order, error) {
 	}
 
 	return orders, nil
+}
+
+func (db *DataBase) GetOrder(number string) (Order, error) {
+	var order Order
+	var accrual sql.NullInt64
+	err := db.DB.QueryRow(dbGetOrder, number).Scan(&order.Status, &accrual)
+	if err != nil {
+		if !errors.Is(err, sql.ErrNoRows) {
+			return Order{}, err
+		}
+	}
+
+	if accrual.Valid {
+		order.Accrual = int(accrual.Int64)
+	}
+
+	if order.Status == "" {
+		return Order{}, db.Err.Empty
+	}
+
+	order.Number = number
+
+	return order, nil
 }
 
 func (db *DataBase) GetBalance(cookie string) (User, error) {

@@ -44,5 +44,9 @@ func GetConfig() (Config, error) {
 		C.RunAddress = "localhost:8080"
 	}
 
+	if C.AccrualSystemAddress != "" {
+		C.AccrualSystemAddress = "/" + C.AccrualSystemAddress
+	}
+
 	return C, nil
 }
