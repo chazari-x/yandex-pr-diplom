@@ -45,8 +45,5 @@ func StartServer() error {
 	r.Get("/api/user/withdrawals", c.GetWithDrawAls)
 	//получение информации о выводе средств накопительного счета пользователем
 
-	r.Get("/api/orders/{number}", c.GetOrdersNumber)
-	//взаимодействие с системой расчёта начислений баллов лояльности
-
 	return http.ListenAndServe(conf.RunAddress, handlers.MiddlewaresConveyor(r))
 }

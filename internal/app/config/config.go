@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"flag"
 
 	"github.com/caarlos0/env/v6"
@@ -42,6 +43,10 @@ func GetConfig() (Config, error) {
 
 	if C.RunAddress == "" {
 		C.RunAddress = "localhost:8080"
+	}
+
+	if C.AccrualSystemAddress == "" {
+		return Config{}, errors.New("accrual system address is nil")
 	}
 
 	return C, nil

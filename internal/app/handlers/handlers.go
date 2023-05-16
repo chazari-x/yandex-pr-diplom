@@ -17,7 +17,6 @@ import (
 
 	"github.com/chazari-x/yandex-pr-diplom/internal/app/config"
 	"github.com/chazari-x/yandex-pr-diplom/internal/app/database"
-	"github.com/go-chi/chi/v5"
 )
 
 type Controller struct {
@@ -511,37 +510,4 @@ func (c *Controller) GetWithDrawAls(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("GetWithDraw: %d, cookie: %s", http.StatusOK, cookie)
-}
-
-func (c *Controller) GetOrdersNumber(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-
-	orders, err := c.db.GetOrder(chi.URLParam(r, "number"))
-	if err != nil {
-		if errors.Is(err, c.db.Err.Empty) {
-			log.Printf("GetOrdersNumber: %d, number: %s", http.StatusNoContent, chi.URLParam(r, "number"))
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-
-		log.Printf("GetOrdersNumber: %d, number: %s", err, chi.URLParam(r, "number"))
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	marshal, err := json.Marshal(orders)
-	if err != nil {
-		log.Print("GetOrdersNumber: json marshal err: ", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	_, err = w.Write(marshal)
-	if err != nil {
-		log.Print("GetOrdersNumber: w write err: ", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	log.Printf("GetOrdersNumber: %d, number: %s", http.StatusOK, chi.URLParam(r, "number"))
 }

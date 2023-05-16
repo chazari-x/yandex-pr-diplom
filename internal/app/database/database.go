@@ -3,7 +3,12 @@ package database
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
+	"io"
+	"log"
+	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -11,6 +16,7 @@ import (
 )
 
 type DataBase struct {
+	ASA string
 	DB  *sql.DB
 	Err errs
 }
@@ -83,8 +89,8 @@ var (
 	// Таблица заказов orders:
 	dbAddOrder      = `INSERT INTO orders (number, login, uploaded_at) VALUES ($1, $2, $3) ON CONFLICT(number) DO NOTHING`
 	dbGetOrders     = `SELECT number, status, accrual, uploaded_at FROM orders WHERE login = $1`
-	dbGetOrder      = `SELECT status, accrual FROM orders WHERE number = $1`
 	dbGetOrderLogin = `SELECT login FROM orders WHERE number = $1`
+	dbUpdateOrder   = `UPDATE orders SET status = $1, accrual = $2 WHERE number = $3`
 
 	// Таблица операций withdraw:
 	dbAddWithDraw = `INSERT INTO withdraw VALUES ($1, $2, $3, $4) ON CONFLICT(orderID) DO NOTHING`
@@ -125,7 +131,7 @@ func StartDB(c config.Config) (*DataBase, error) {
 	errs.NoMoney = errors.New("no money")
 	errs.WrongData = errors.New("wrong data")
 
-	return &DataBase{DB: db, Err: errs}, nil
+	return &DataBase{ASA: c.AccrualSystemAddress, DB: db, Err: errs}, nil
 }
 
 func (db *DataBase) Register(login, pass, cookie string) error {
@@ -218,6 +224,136 @@ func (db *DataBase) AddOrder(cookie string, order int) error {
 		return db.Err.Duplicate
 	}
 
+	db.getOrderInfo(string(rune(order)))
+
+	return nil
+}
+
+const workersCount = 5
+
+var workers = 0
+
+func (db *DataBase) getOrderInfo(number string) {
+	inputCh := make(chan string)
+
+	go func() {
+		inputCh <- number
+
+		//close(inputCh)
+	}()
+
+	//fanOutChs := db.fanOut(inputCh, workersCount)
+	//for _, fanOutCh := range fanOutChs {
+	if workers < workersCount {
+		for i := workers; i < workersCount; i++ {
+			db.newWorker(inputCh)
+			workers++
+		}
+	}
+	//}
+}
+
+//func (db *DataBase) fanOut(inputCh chan string, n int) []chan string {
+//	chs := make([]chan string, 0, n)
+//	for i := 0; i < n; i++ {
+//		ch := make(chan string)
+//		chs = append(chs, ch)
+//	}
+//
+//	go func() {
+//		defer func(chs []chan string) {
+//			for _, ch := range chs {
+//				close(ch)
+//			}
+//		}(chs)
+//
+//		for i := 0; ; i++ {
+//			if i == len(chs) {
+//				i = 0
+//			}
+//
+//			number, ok := <-inputCh
+//			if !ok {
+//				return
+//			}
+//
+//			ch := chs[i]
+//			ch <- number
+//		}
+//	}()
+//
+//	return chs
+//}
+
+func (db *DataBase) newWorker(input chan string) {
+	go func() {
+		defer func() {
+			if x := recover(); x != nil {
+				db.newWorker(input)
+				log.Print("run time panic: ", x)
+			}
+		}()
+
+		for number := range input {
+			resp, err := http.Get("http://" + db.ASA + "/api/orders/" + number)
+			if err != nil {
+				input <- number
+				log.Print(err)
+				return
+			}
+
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				input <- number
+				log.Print(err)
+				return
+			}
+
+			switch resp.Status {
+			case "200":
+				var order Order
+				err = json.Unmarshal(b, &order)
+				if err != nil {
+					input <- number
+					log.Print(err)
+					return
+				}
+
+				switch order.Status {
+				case "INVALID", "PROCESSING", "PROCESSED":
+					err := db.updateOrder(order)
+					if err != nil {
+						input <- number
+						log.Print(err)
+						return
+					}
+
+				default:
+					input <- number
+				}
+			//case "204":
+			case "429":
+				input <- number
+				atoi, err := strconv.Atoi(resp.Header.Get("Retry-After"))
+				if err != nil {
+					log.Print(err)
+					time.Sleep(time.Second * 60)
+				} else {
+					time.Sleep(time.Second * time.Duration(atoi))
+				}
+			case "500":
+				input <- number
+			}
+		}
+	}()
+}
+
+func (db *DataBase) updateOrder(order Order) error {
+	_, err := db.DB.Exec(dbUpdateOrder, order.Status, order.Accrual, order.Number)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -264,29 +400,6 @@ func (db *DataBase) GetOrders(cookie string) ([]Order, error) {
 	}
 
 	return orders, nil
-}
-
-func (db *DataBase) GetOrder(number string) (Order, error) {
-	var order Order
-	var accrual sql.NullInt64
-	err := db.DB.QueryRow(dbGetOrder, number).Scan(&order.Status, &accrual)
-	if err != nil {
-		if !errors.Is(err, sql.ErrNoRows) {
-			return Order{}, err
-		}
-	}
-
-	if accrual.Valid {
-		order.Accrual = int(accrual.Int64)
-	}
-
-	if order.Status == "" {
-		return Order{}, db.Err.Empty
-	}
-
-	order.Number = number
-
-	return order, nil
 }
 
 func (db *DataBase) GetBalance(cookie string) (User, error) {
