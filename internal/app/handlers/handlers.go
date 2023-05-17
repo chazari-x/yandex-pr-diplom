@@ -12,6 +12,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -175,24 +176,23 @@ func setCookie(w http.ResponseWriter) (string, error) {
 	return uid, nil
 }
 
+var t = [...]int{0, 2, 4, 6, 8, 1, 3, 5, 7, 9}
+
 func checkOrderNumber(number int) bool {
-	var luhn int
-
-	for i := 0; number > 0; i++ {
-		cur := number % 10
-
-		if i%2 == 0 { // even
-			cur = cur * 2
-			if cur > 9 {
-				cur = cur%10 + cur/10
-			}
+	s := strconv.Itoa(number)
+	odd := len(s) & 1
+	var sum int
+	for i, c := range s {
+		if c < '0' || c > '9' {
+			return false
 		}
-
-		luhn += cur
-		number = number / 10
+		if i&1 == odd {
+			sum += t[c-'0']
+		} else {
+			sum += int(c - '0')
+		}
 	}
-
-	return (luhn % 10) == 0
+	return sum%10 == 0
 }
 
 type userStruct struct {
