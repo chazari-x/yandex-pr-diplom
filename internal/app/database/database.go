@@ -104,12 +104,12 @@ func StartDB(c config.Config) (*DataBase, error) {
 		return nil, fmt.Errorf("sql open err: %s", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-
-	if err = db.PingContext(ctx); err != nil {
-		return nil, err
-	}
+	//ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	//defer cancel()
+	//
+	//if err = db.PingContext(ctx); err != nil {
+	//	return nil, err
+	//}
 
 	tableCtx, tableCancel := context.WithTimeout(context.Background(), time.Second)
 	defer tableCancel()
