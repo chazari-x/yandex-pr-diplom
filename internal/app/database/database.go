@@ -436,14 +436,23 @@ func (db *DataBase) updateOrder(order Order, cookie string) error {
 		return errors.New("failed update order")
 	}
 
-	var balance User
-	var current sql.NullFloat64
-	var withdraw sql.NullFloat64
-	if err := db.DB.QueryRow(dbGetBalance, login).Scan(&balance.Login, &current, &withdraw); err != nil {
+	rows, err := db.DB.Query(dbGetOrders, login)
+	var orders []Order
+	for rows.Next() {
+		var order Order
+		err := rows.Scan(&order.Number, &order.Status, &order.Accrual, &order.UploadedAt)
+		if err != nil {
+			return err
+		}
+
+		orders = append(orders, order)
+	}
+
+	if err := rows.Err(); err != nil {
 		return err
 	}
 
-	log.Print(current, withdraw)
+	log.Print(orders)
 
 	log.Printf("update order: number: %s, status: %s, accrual: %g", order.Number, order.Status, order.Accrual)
 
