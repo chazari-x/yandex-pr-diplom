@@ -111,7 +111,9 @@ func StartDB(c config.Config) (*DataBase, error) {
 		return nil, err
 	}
 
-	_, err = db.Exec(dbCreateTables)
+	tableCtx, tableCancel := context.WithTimeout(context.Background(), time.Second)
+	defer tableCancel()
+	_, err = db.ExecContext(tableCtx, dbCreateTables)
 	if err != nil {
 		return nil, err
 	}
