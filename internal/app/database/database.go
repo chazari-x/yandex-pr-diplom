@@ -104,9 +104,10 @@ func StartDB(c config.Config) (*DataBase, error) {
 		return nil, fmt.Errorf("sql open err: %s", err)
 	}
 
-	if err = db.Ping(); err != nil {
-		return nil, err
-	}
+	//err = db.Ping()
+	//if err != nil {
+	//	return nil, err
+	//}
 
 	//_, err = db.Exec(dbCreateTables)
 	//if err != nil {
