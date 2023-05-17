@@ -93,11 +93,16 @@ const workersCount = 1
 
 var workers = 0
 
-var inputCh = make(chan string)
+var inputCh = make(chan orderStr)
+
+type orderStr struct {
+	number string
+	status string
+}
 
 func (db *DataBase) getOrderInfo(number string) {
 	go func(number string) {
-		inputCh <- number
+		inputCh <- orderStr{number: number, status: "NEW"}
 	}(number)
 
 	if workers < workersCount {
@@ -108,7 +113,7 @@ func (db *DataBase) getOrderInfo(number string) {
 	}
 }
 
-func (db *DataBase) newWorker(input chan string) {
+func (db *DataBase) newWorker(input chan orderStr) {
 	go func() {
 		log.Print("starting goroutine")
 
@@ -120,23 +125,23 @@ func (db *DataBase) newWorker(input chan string) {
 		}()
 
 		for {
-			for number := range input {
-				resp, err := http.Get(db.ASA + "/api/orders/" + number)
+			for o := range input {
+				resp, err := http.Get(db.ASA + "/api/orders/" + o.number)
 				if err != nil {
-					go func(number string) {
-						inputCh <- number
-					}(number)
-					log.Printf("go number: %s, err: %s", number, err.Error())
+					go func(o orderStr) {
+						inputCh <- o
+					}(o)
+					log.Printf("go number: %s, err: %s", o.number, err.Error())
 					resp.Body.Close()
 					return
 				}
 
 				b, err := io.ReadAll(resp.Body)
 				if err != nil {
-					go func(number string) {
-						inputCh <- number
-					}(number)
-					log.Printf("go number: %s, err: %s", number, err.Error())
+					go func(o orderStr) {
+						inputCh <- o
+					}(o)
+					log.Printf("go number: %s, err: %s", o.number, err.Error())
 					resp.Body.Close()
 					return
 				}
@@ -159,74 +164,83 @@ func (db *DataBase) newWorker(input chan string) {
 					var order Order
 					err = json.Unmarshal(b, &order)
 					if err != nil {
-						go func(number string) {
-							inputCh <- number
-						}(number)
-						log.Printf("go number: %s, err: %s", number, err.Error())
+						go func(o orderStr) {
+							inputCh <- o
+						}(o)
+						log.Printf("go number: %s, err: %s", o.number, err.Error())
 						return
 					}
 
-					order.Number = number
+					order.Number = o.number
 
 					switch order.Status {
 					case "PROCESSING":
-						log.Printf("go number: %s, status: %s", number, order.Status)
-						go func(number string, order Order) {
-							err := db.updateOrder(order)
-							if err != nil {
-								log.Printf("go number: %s, err: %s", number, err.Error())
-								return
+						log.Printf("go number: %s, status: %s", o.number, order.Status)
+						go func(o orderStr, order Order) {
+							if o.status != order.Status {
+								err := db.updateOrder(order)
+								if err != nil {
+									log.Printf("go number: %s, err: %s", o.number, err.Error())
+									return
+								}
+								o.status = "PROCESSING"
 							}
-							inputCh <- number
-						}(number, order)
+							inputCh <- o
+						}(o, order)
 					case "INVALID", "PROCESSED":
-						log.Printf("go number: %s, status: %s, accrual: %g", number, order.Status, order.Accrual)
-						go func(number string, order Order) {
-							err := db.updateOrder(order)
-							if err != nil {
-								inputCh <- number
-								log.Printf("go number: %s, err: %s", number, err.Error())
-								return
+						log.Printf("go number: %s, status: %s, accrual: %g", o.number, order.Status, order.Accrual)
+						go func(o orderStr, order Order) {
+							if o.status != order.Status {
+								err := db.updateOrder(order)
+								if err != nil {
+									o.status = order.Status
+									inputCh <- o
+									log.Printf("go number: %s, err: %s", o.number, err.Error())
+									return
+								}
 							}
-						}(number, order)
+						}(o, order)
 					default:
-						log.Printf("go number: %s, status: %s", number, order.Status)
-						go func(number string) {
-							inputCh <- number
-						}(number)
+						log.Printf("go number: %s, status: %s", o.number, order.Status)
+						go func(o orderStr) {
+							inputCh <- o
+						}(o)
 					}
 				case http.StatusTooManyRequests:
-					log.Printf("go number: %s, status: %s", number, resp.Status)
-					go func(number string) {
-						inputCh <- number
-					}(number)
+					log.Printf("go number: %s, status: %s", o.number, resp.Status)
+					go func(o orderStr) {
+						inputCh <- o
+					}(o)
 					atoi, err := strconv.Atoi(resp.Header.Get("Retry-After"))
 					if err != nil {
-						log.Printf("go number: %s, err: %s", number, err.Error())
+						log.Printf("go number: %s, err: %s", o.number, err.Error())
 						time.Sleep(time.Second * 15)
 					} else {
 						time.Sleep(time.Second * time.Duration(atoi))
 					}
 				case http.StatusInternalServerError:
-					log.Printf("go number: %s, status: %s", number, resp.Status)
-					go func(number string) {
-						inputCh <- number
-					}(number)
+					log.Printf("go number: %s, status: %s", o.number, resp.Status)
+					go func(o orderStr) {
+						inputCh <- o
+					}(o)
 				case http.StatusNoContent:
-					log.Printf("go number: %s, status: %s", number, resp.Status)
-					go func(number string) {
-						err := db.updateOrder(Order{Status: "PROCESSING", Number: number})
-						if err != nil {
-							log.Printf("go number: %s, err: %s", number, err.Error())
-							return
+					log.Printf("go number: %s, status: %s", o.number, resp.Status)
+					go func(o orderStr) {
+						if o.status != "PROCESSING" {
+							err := db.updateOrder(Order{Status: "PROCESSING", Number: o.number})
+							if err != nil {
+								log.Printf("go number: %s, err: %s", o.number, err.Error())
+								return
+							}
+							o.status = "PROCESSING"
 						}
-						inputCh <- number
-					}(number)
+						inputCh <- o
+					}(o)
 				default:
-					log.Printf("go number: %s, status: %s", number, resp.Status)
-					go func(number string) {
-						inputCh <- number
-					}(number)
+					log.Printf("go number: %s, status: %s", o.number, resp.Status)
+					go func(o orderStr) {
+						inputCh <- o
+					}(o)
 				}
 			}
 		}
