@@ -231,7 +231,9 @@ var workers = 0
 
 func (db *DataBase) getOrderInfo(number string) {
 	inputCh := make(chan string)
-	inputCh <- number
+	go func() {
+		inputCh <- number
+	}()
 
 	if workers < workersCount {
 		for i := workers; i < workersCount; i++ {
