@@ -20,11 +20,11 @@ func StartServer() error {
 		return err
 	}
 
-	c := handlers.NewController(conf, db)
+	_ = handlers.NewController(conf, db)
 
 	r := chi.NewRouter()
 
-	r.Post("/api/user/register", c.PostRegister)
+	//r.Post("/api/user/register", c.PostRegister)
 	//регистрация пользователя
 
 	//r.Post("/api/user/login", c.PostLogin)
