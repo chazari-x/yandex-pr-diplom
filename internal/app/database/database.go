@@ -316,9 +316,9 @@ func (db *DataBase) newWorker(input chan string) {
 						return
 					}
 
-					log.Printf("go number: %s, status: %s", number, order.Status)
 					switch order.Status {
 					case "PROCESSING":
+						log.Printf("go number: %s, status: %s", number, order.Status)
 						go func(number string) {
 							inputCh <- number
 						}(number)
@@ -330,6 +330,7 @@ func (db *DataBase) newWorker(input chan string) {
 							return
 						}
 					case "INVALID", "PROCESSED":
+						log.Printf("go number: %s, status: %s, accrual: %g", number, order.Status, order.Accrual)
 						err := db.updateOrder(order)
 						if err != nil {
 							go func(number string) {
@@ -341,6 +342,7 @@ func (db *DataBase) newWorker(input chan string) {
 							return
 						}
 					default:
+						log.Printf("go number: %s, status: %s", number, order.Status)
 						go func(number string) {
 							inputCh <- number
 						}(number)
