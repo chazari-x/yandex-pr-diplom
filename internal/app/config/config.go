@@ -17,8 +17,7 @@ type Config struct {
 }
 
 func GetConfig() (Config, error) {
-	err := env.Parse(&C)
-	if err != nil {
+	if err := env.Parse(&C); err != nil {
 		return Config{}, err
 	}
 

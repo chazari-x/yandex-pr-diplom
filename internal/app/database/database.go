@@ -110,7 +110,7 @@ func StartDB(c config.Config) (*DataBase, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	if db.PingContext(ctx) != nil {
+	if err = db.PingContext(ctx); err != nil {
 		return nil, err
 	}
 
