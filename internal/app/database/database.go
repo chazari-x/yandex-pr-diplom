@@ -100,7 +100,7 @@ var (
 func StartDB(c config.Config) (*DataBase, error) {
 	db, err := sql.Open("postgres", c.DataBaseURI)
 	if err != nil {
-		return nil, err
+		return nil, errors.New("asdasdsad")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
