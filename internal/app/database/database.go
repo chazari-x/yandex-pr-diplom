@@ -283,26 +283,12 @@ func (db *DataBase) newWorker(input chan string) {
 
 		for {
 			for number := range input {
-				req, err := http.NewRequest("GET", db.ASA+"/api/orders/"+number, nil)
+				resp, err := http.Get(db.ASA + "/api/orders/" + number)
 				if err != nil {
 					go func(number string) {
 						inputCh <- number
 					}(number)
 					log.Printf("go number: %s, err: %s", number, err.Error())
-					return
-				}
-
-				ctx, cancel := context.WithTimeout(req.Context(), time.Second)
-				req = req.WithContext(ctx)
-				client := http.DefaultClient
-				resp, err := client.Do(req)
-				if err != nil {
-					go func(number string) {
-						inputCh <- number
-					}(number)
-					log.Printf("go number: %s, err: %s", number, err.Error())
-					resp.Body.Close()
-					cancel()
 					return
 				}
 
@@ -313,7 +299,6 @@ func (db *DataBase) newWorker(input chan string) {
 					}(number)
 					log.Printf("go number: %s, err: %s", number, err.Error())
 					resp.Body.Close()
-					cancel()
 					return
 				}
 
@@ -338,7 +323,6 @@ func (db *DataBase) newWorker(input chan string) {
 						}(number)
 						log.Printf("go number: %s, err: %s", number, err.Error())
 						resp.Body.Close()
-						cancel()
 						return
 					}
 
@@ -354,7 +338,6 @@ func (db *DataBase) newWorker(input chan string) {
 						if err != nil {
 							log.Printf("go number: %s, err: %s", number, err.Error())
 							resp.Body.Close()
-							cancel()
 							return
 						}
 					case "INVALID", "PROCESSED":
@@ -366,7 +349,6 @@ func (db *DataBase) newWorker(input chan string) {
 							}(number)
 							log.Printf("go number: %s, err: %s", number, err.Error())
 							resp.Body.Close()
-							cancel()
 							return
 						}
 					default:
@@ -401,7 +383,6 @@ func (db *DataBase) newWorker(input chan string) {
 						}(number)
 						log.Printf("go number: %s, err: %s", number, err.Error())
 						resp.Body.Close()
-						cancel()
 						return
 					}
 				default:
@@ -412,7 +393,6 @@ func (db *DataBase) newWorker(input chan string) {
 				}
 
 				resp.Body.Close()
-				cancel()
 			}
 		}
 	}()
