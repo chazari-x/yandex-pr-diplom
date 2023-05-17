@@ -1,7 +1,6 @@
 package database
 
 import (
-	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -57,26 +56,26 @@ type WithDraw struct {
 }
 
 var (
-	dbCreateUsersTable = `CREATE TABLE IF NOT EXISTS users (
-							userid			SERIAL  PRIMARY KEY NOT NULL,
-							login			VARCHAR UNIQUE		NOT NULL, 
-							password		VARCHAR 			NOT NULL, 
-							cookie			VARCHAR UNIQUE		NULL,
-							current			INTEGER 			NOT NULL	DEFAULT 0, 
-							withdrawn		INTEGER 			NOT NULL	DEFAULT 0)`
-
-	dbCreateOrdersTable = `CREATE TABLE IF NOT EXISTS Orders (
-							number 			VARCHAR PRIMARY KEY NOT NULL,
-							login 			VARCHAR 			NOT NULL,
-							status 			VARCHAR 			NOT NULL	DEFAULT 'NEW', 
-							accrual 		INTEGER 			NULL,
-							uploaded_at 	VARCHAR				NOT NULL)`
-
-	dbCreateWithDrawTable = `CREATE TABLE IF NOT EXISTS withdraw (
-							orderID 		VARCHAR PRIMARY KEY NOT NULL,
-							login 			VARCHAR 			NOT NULL,
-							sum 			INTEGER 			NOT NULL,
-							processed_at	VARCHAR 			NOT NULL)`
+	//dbCreateUsersTable = `CREATE TABLE IF NOT EXISTS users (
+	//						userid			SERIAL  PRIMARY KEY NOT NULL,
+	//						login			VARCHAR UNIQUE		NOT NULL,
+	//						password		VARCHAR 			NOT NULL,
+	//						cookie			VARCHAR UNIQUE		NULL,
+	//						current			INTEGER 			NOT NULL	DEFAULT 0,
+	//						withdrawn		INTEGER 			NOT NULL	DEFAULT 0)`
+	//
+	//dbCreateOrdersTable = `CREATE TABLE IF NOT EXISTS Orders (
+	//						number 			VARCHAR PRIMARY KEY NOT NULL,
+	//						login 			VARCHAR 			NOT NULL,
+	//						status 			VARCHAR 			NOT NULL	DEFAULT 'NEW',
+	//						accrual 		INTEGER 			NULL,
+	//						uploaded_at 	VARCHAR				NOT NULL)`
+	//
+	//dbCreateWithDrawTable = `CREATE TABLE IF NOT EXISTS withdraw (
+	//						orderID 		VARCHAR PRIMARY KEY NOT NULL,
+	//						login 			VARCHAR 			NOT NULL,
+	//						sum 			INTEGER 			NOT NULL,
+	//						processed_at	VARCHAR 			NOT NULL)`
 
 	// Таблица пользователей users:
 	dbRegistration  = `INSERT INTO users (login, password, cookie) VALUES ($1, $2, $3) ON CONFLICT(login) DO NOTHING`
@@ -104,24 +103,24 @@ func StartDB(c config.Config) (*DataBase, error) {
 		return nil, fmt.Errorf("sql open err: %s", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-
-	if err = db.PingContext(ctx); err != nil {
-		return nil, err
-	}
-
-	if _, err = db.Exec(dbCreateUsersTable); err != nil {
-		return nil, err
-	}
-
-	if _, err = db.Exec(dbCreateOrdersTable); err != nil {
-		return nil, err
-	}
-
-	if _, err = db.Exec(dbCreateWithDrawTable); err != nil {
-		return nil, err
-	}
+	//ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	//defer cancel()
+	//
+	//if err = db.PingContext(ctx); err != nil {
+	//	return nil, err
+	//}
+	//
+	//if _, err = db.Exec(dbCreateUsersTable); err != nil {
+	//	return nil, err
+	//}
+	//
+	//if _, err = db.Exec(dbCreateOrdersTable); err != nil {
+	//	return nil, err
+	//}
+	//
+	//if _, err = db.Exec(dbCreateWithDrawTable); err != nil {
+	//	return nil, err
+	//}
 
 	var errs errs
 	errs.Used = errors.New("used")
