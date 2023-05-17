@@ -1,8 +1,8 @@
 package config
 
 import (
-	"errors"
 	"flag"
+	"log"
 
 	"github.com/caarlos0/env/v6"
 	_ "github.com/lib/pq"
@@ -31,23 +31,25 @@ func init() {
 }
 
 func GetConfig() (Config, error) {
-	flag.Parse()
-	C.RunAddress = *f.RunAddress
-	C.AccrualSystemAddress = *f.AccrualSystemAddress
-	C.DataBaseURI = *f.DataBaseURI
-
 	err := env.Parse(&C)
 	if err != nil {
 		return Config{}, err
 	}
 
+	flag.Parse()
+	C.RunAddress = *f.RunAddress
+	C.AccrualSystemAddress = *f.AccrualSystemAddress
+	C.DataBaseURI = *f.DataBaseURI
+
 	if C.RunAddress == "" {
 		C.RunAddress = "localhost:8080"
 	}
 
-	if C.AccrualSystemAddress == "" {
-		return Config{}, errors.New("accrual system address is nil")
-	}
+	//if C.AccrualSystemAddress == "" {
+	//	return Config{}, errors.New("accrual system address is nil")
+	//}
+
+	log.Print(C)
 
 	return C, nil
 }

@@ -292,9 +292,9 @@ func (db *DataBase) newWorker(input chan string) {
 
 		defer func() {
 			resp.Body.Close()
+			db.newWorker(input)
 
 			if x := recover(); x != nil {
-				db.newWorker(input)
 				log.Print("run time panic: ", x)
 			}
 		}()
