@@ -227,7 +227,7 @@ func (db *DataBase) AddOrder(cookie string, order int) error {
 		return db.Err.Duplicate
 	}
 
-	db.getOrderInfo(strconv.Itoa(order), cookie)
+	db.getOrderInfo(strconv.Itoa(order))
 
 	return nil
 }
@@ -257,7 +257,7 @@ var workers = 0
 
 var inputCh = make(chan string)
 
-func (db *DataBase) getOrderInfo(number, cookie string) {
+func (db *DataBase) getOrderInfo(number string) {
 	go func(number string) {
 		inputCh <- number
 	}(number)
@@ -265,17 +265,17 @@ func (db *DataBase) getOrderInfo(number, cookie string) {
 	if workers < workersCount {
 		for i := workers; i < workersCount; i++ {
 			workers++
-			db.newWorker(inputCh, cookie)
+			db.newWorker(inputCh)
 		}
 	}
 }
 
-func (db *DataBase) newWorker(input chan string, cookie string) {
+func (db *DataBase) newWorker(input chan string) {
 	go func() {
 		log.Print("starting goroutine")
 
 		defer func() {
-			db.newWorker(input, cookie)
+			db.newWorker(input)
 			if x := recover(); x != nil {
 				log.Print("run time panic: ", x)
 			}
@@ -350,7 +350,7 @@ func (db *DataBase) newWorker(input chan string, cookie string) {
 						go func(number string) {
 							inputCh <- number
 						}(number)
-						err := db.updateOrder(order, cookie)
+						err := db.updateOrder(order)
 						if err != nil {
 							log.Printf("go number: %s, err: %s", number, err.Error())
 							resp.Body.Close()
@@ -359,7 +359,7 @@ func (db *DataBase) newWorker(input chan string, cookie string) {
 						}
 					case "INVALID", "PROCESSED":
 						log.Printf("go number: %s, status: %s, accrual: %g", number, order.Status, order.Accrual)
-						err := db.updateOrder(order, cookie)
+						err := db.updateOrder(order)
 						if err != nil {
 							go func(number string) {
 								inputCh <- number
@@ -394,7 +394,7 @@ func (db *DataBase) newWorker(input chan string, cookie string) {
 					}(number)
 				case http.StatusNoContent:
 					log.Printf("go number: %s, status: %s", number, resp.Status)
-					err := db.updateOrder(Order{Status: "INVALID", Number: number}, cookie)
+					err := db.updateOrder(Order{Status: "INVALID", Number: number})
 					if err != nil {
 						go func(number string) {
 							inputCh <- number
@@ -420,12 +420,7 @@ func (db *DataBase) newWorker(input chan string, cookie string) {
 	}()
 }
 
-func (db *DataBase) updateOrder(order Order, cookie string) error {
-	var login string
-	if err := db.DB.QueryRow(dbGetLogin, cookie).Scan(&login); err != nil {
-		return err
-	}
-
+func (db *DataBase) updateOrder(order Order) error {
 	exec, err := db.DB.Exec(dbUpdateOrder, order.Status, order.Accrual, order.Number)
 	if err != nil {
 		return err
@@ -439,28 +434,6 @@ func (db *DataBase) updateOrder(order Order, cookie string) error {
 	if affected == 0 {
 		return errors.New("failed update order")
 	}
-
-	rows, err := db.DB.Query(dbGetOrders, login)
-	if err != nil {
-		return err
-	}
-
-	var orders []Order
-	for rows.Next() {
-		var order Order
-		err := rows.Scan(&order.Number, &order.Status, &order.Accrual, &order.UploadedAt)
-		if err != nil {
-			return err
-		}
-
-		orders = append(orders, order)
-	}
-
-	if err := rows.Err(); err != nil {
-		return err
-	}
-
-	log.Print(orders)
 
 	log.Printf("update order: number: %s, status: %s, accrual: %g", order.Number, order.Status, order.Accrual)
 
@@ -525,11 +498,9 @@ func (db *DataBase) GetBalance(cookie string) (User, error) {
 	var balance User
 	var current sql.NullFloat64
 	var withdraw sql.NullFloat64
-	if err := db.DB.QueryRow(dbGetBalance, login).Scan(&balance.Login, &balance.Current, &balance.WithDraw); err != nil {
+	if err := db.DB.QueryRow(dbGetBalance, login).Scan(&balance.Login, &current, &withdraw); err != nil {
 		return User{}, err
 	}
-
-	log.Print(current, withdraw)
 
 	balance.Current = current.Float64
 	balance.WithDraw = withdraw.Float64
