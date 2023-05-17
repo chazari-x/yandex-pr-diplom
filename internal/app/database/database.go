@@ -291,8 +291,19 @@ func (db *DataBase) newWorker(input chan string) {
 					return
 				}
 
-				switch resp.Status {
-				case "200":
+				var status = 0
+				if strings.Contains(resp.Status, "200") {
+					status = http.StatusOK
+				} else if strings.Contains(resp.Status, "429") {
+					status = http.StatusTooManyRequests
+				} else if strings.Contains(resp.Status, "500") {
+					status = http.StatusInternalServerError
+				} else if strings.Contains(resp.Status, "204") {
+					status = http.StatusNoContent
+				}
+
+				switch status {
+				case http.StatusOK:
 					var order Order
 					err = json.Unmarshal(b, &order)
 					if err != nil {
@@ -308,7 +319,6 @@ func (db *DataBase) newWorker(input chan string) {
 					log.Printf("go number: %s, status: %s", number, order.Status)
 					switch order.Status {
 					case "PROCESSING":
-
 						go func(number string) {
 							inputCh <- number
 						}(number)
@@ -335,7 +345,7 @@ func (db *DataBase) newWorker(input chan string) {
 							inputCh <- number
 						}(number)
 					}
-				case "429":
+				case http.StatusTooManyRequests:
 					log.Printf("go number: %s, status: %s", number, resp.Status)
 					go func(number string) {
 						inputCh <- number
@@ -347,12 +357,12 @@ func (db *DataBase) newWorker(input chan string) {
 					} else {
 						time.Sleep(time.Second * time.Duration(atoi))
 					}
-				case "500":
+				case http.StatusInternalServerError:
 					log.Printf("go number: %s, status: %s", number, resp.Status)
 					go func(number string) {
 						inputCh <- number
 					}(number)
-				case "204":
+				case http.StatusNoContent:
 					log.Printf("go number: %s, status: %s", number, resp.Status)
 					err := db.updateOrder(Order{Status: "INVALID", Number: number})
 					if err != nil {
@@ -420,7 +430,7 @@ func (db *DataBase) GetOrders(cookie string) ([]Order, error) {
 		orders = append(orders, order)
 	}
 
-	if rows.Err() != nil {
+	if err = rows.Err(); err != nil {
 		return nil, err
 	}
 
