@@ -440,6 +440,10 @@ func (db *DataBase) updateOrder(order Order, cookie string) error {
 	}
 
 	rows, err := db.DB.Query(dbGetOrders, login)
+	if err != nil {
+		return err
+	}
+
 	var orders []Order
 	for rows.Next() {
 		var order Order
@@ -518,16 +522,16 @@ func (db *DataBase) GetBalance(cookie string) (User, error) {
 	}
 
 	var balance User
-	var current sql.NullFloat64
-	var withdraw sql.NullFloat64
-	if err := db.DB.QueryRow(dbGetBalance, login).Scan(&balance.Login, &current, &withdraw); err != nil {
+	//var current sql.NullFloat64
+	//var withdraw sql.NullFloat64
+	if err := db.DB.QueryRow(dbGetBalance, login).Scan(&balance.Login, &balance.Current, &balance.WithDraw); err != nil {
 		return User{}, err
 	}
 
-	log.Print(current, withdraw)
-
-	balance.Current = current.Float64
-	balance.WithDraw = withdraw.Float64
+	//log.Print(current, withdraw)
+	//
+	//balance.Current = current.Float64
+	//balance.WithDraw = withdraw.Float64
 
 	return balance, nil
 }
