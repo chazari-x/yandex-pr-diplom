@@ -52,7 +52,7 @@ type Order struct {
 }
 
 type WithDraw struct {
-	OrderID     string  `json:"order_id"`
+	OrderID     string  `json:"order"`
 	Login       string  `json:"login,omitempty"`
 	Sum         float64 `json:"sum"`
 	ProcessedAt string  `json:"processed_at"`
@@ -334,23 +334,26 @@ func (db *DataBase) newWorker(input chan string) {
 						go func(number string) {
 							inputCh <- number
 						}(number)
-						err := db.updateOrder(order)
-						if err != nil {
-							log.Printf("go number: %s, err: %s", number, err.Error())
-							resp.Body.Close()
-							return
-						}
+						go func(number string, order Order) {
+							err := db.updateOrder(order)
+							if err != nil {
+								log.Printf("go number: %s, err: %s", number, err.Error())
+								resp.Body.Close()
+								return
+							}
+							inputCh <- number
+						}(number, order)
 					case "INVALID", "PROCESSED":
 						log.Printf("go number: %s, status: %s, accrual: %g", number, order.Status, order.Accrual)
-						err := db.updateOrder(order)
-						if err != nil {
-							go func(number string) {
+						go func(number string, order Order) {
+							err := db.updateOrder(order)
+							if err != nil {
 								inputCh <- number
-							}(number)
-							log.Printf("go number: %s, err: %s", number, err.Error())
-							resp.Body.Close()
-							return
-						}
+								log.Printf("go number: %s, err: %s", number, err.Error())
+								resp.Body.Close()
+								return
+							}
+						}(number, order)
 					default:
 						log.Printf("go number: %s, status: %s", number, order.Status)
 						go func(number string) {
@@ -376,15 +379,15 @@ func (db *DataBase) newWorker(input chan string) {
 					}(number)
 				case http.StatusNoContent:
 					log.Printf("go number: %s, status: %s", number, resp.Status)
-					err := db.updateOrder(Order{Status: "INVALID", Number: number})
-					if err != nil {
-						go func(number string) {
+					go func(number string) {
+						err := db.updateOrder(Order{Status: "INVALID", Number: number})
+						if err != nil {
 							inputCh <- number
-						}(number)
-						log.Printf("go number: %s, err: %s", number, err.Error())
-						resp.Body.Close()
-						return
-					}
+							log.Printf("go number: %s, err: %s", number, err.Error())
+							resp.Body.Close()
+							return
+						}
+					}(number)
 				default:
 					log.Printf("go number: %s, status: %s", number, resp.Status)
 					go func(number string) {

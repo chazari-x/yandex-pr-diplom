@@ -470,6 +470,7 @@ func (c *Controller) GetWithDrawAls(w http.ResponseWriter, r *http.Request) {
 	withdraw, err := c.db.GetWithDraw(cookie)
 	if err != nil {
 		if errors.Is(err, c.db.Err.NoAuthorization) {
+			log.Printf("GetWithDraw: %d, cookie: %s", http.StatusUnauthorized, cookie)
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
