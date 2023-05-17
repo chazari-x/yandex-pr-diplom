@@ -390,6 +390,7 @@ func (db *DataBase) newWorker(input chan string) {
 }
 
 func (db *DataBase) updateOrder(order Order) error {
+	log.Print("updating order: ", order)
 	_, err := db.DB.Exec(dbUpdateOrder, order.Status, order.Accrual, order.Number)
 	if err != nil {
 		return err
