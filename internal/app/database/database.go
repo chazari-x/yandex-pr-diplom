@@ -377,12 +377,12 @@ func (db *DataBase) newWorker(input chan string) {
 				case http.StatusNoContent:
 					log.Printf("go number: %s, status: %s", number, resp.Status)
 					go func(number string) {
-						err := db.updateOrder(Order{Status: "INVALID", Number: number})
+						err := db.updateOrder(Order{Status: "PROCESSING", Number: number})
 						if err != nil {
-							inputCh <- number
 							log.Printf("go number: %s, err: %s", number, err.Error())
 							return
 						}
+						inputCh <- number
 					}(number)
 				default:
 					log.Printf("go number: %s, status: %s", number, resp.Status)
@@ -437,9 +437,7 @@ func (db *DataBase) GetOrders(cookie string) ([]Order, error) {
 		var order Order
 		var accrual sql.NullFloat64
 		if err = rows.Scan(&order.Number, &order.Status, &accrual, &order.UploadedAt); err != nil {
-			if !errors.Is(err, sql.ErrNoRows) {
-				return nil, err
-			}
+			return nil, err
 		}
 
 		order.Accrual = accrual.Float64
