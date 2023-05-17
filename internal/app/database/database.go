@@ -103,7 +103,7 @@ var (
 func StartDB(c config.Config) (*DataBase, error) {
 	db, err := sql.Open("postgres", c.DataBaseURI)
 	if err != nil {
-		return nil, fmt.Errorf("sql open err: %s", err)
+		return nil, fmt.Errorf("sql open err: %s", err.Error())
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -226,7 +226,7 @@ func (db *DataBase) AddOrder(cookie string, order int) error {
 		return db.Err.Duplicate
 	}
 
-	db.getOrderInfo(strconv.Itoa(order))
+	db.getOrderInfo(strconv.Itoa(order), cookie)
 
 	return nil
 }
@@ -256,7 +256,7 @@ var workers = 0
 
 var inputCh = make(chan string)
 
-func (db *DataBase) getOrderInfo(number string) {
+func (db *DataBase) getOrderInfo(number, cookie string) {
 	go func(number string) {
 		inputCh <- number
 	}(number)
@@ -264,17 +264,17 @@ func (db *DataBase) getOrderInfo(number string) {
 	if workers < workersCount {
 		for i := workers; i < workersCount; i++ {
 			workers++
-			db.newWorker(inputCh)
+			db.newWorker(inputCh, cookie)
 		}
 	}
 }
 
-func (db *DataBase) newWorker(input chan string) {
+func (db *DataBase) newWorker(input chan string, cookie string) {
 	go func() {
 		log.Print("starting goroutine")
 
 		defer func() {
-			db.newWorker(input)
+			db.newWorker(input, cookie)
 			if x := recover(); x != nil {
 				log.Print("run time panic: ", x)
 			}
@@ -287,7 +287,7 @@ func (db *DataBase) newWorker(input chan string) {
 					go func(number string) {
 						inputCh <- number
 					}(number)
-					log.Printf("go number: %s, err: %s", number, err)
+					log.Printf("go number: %s, err: %s", number, err.Error())
 					return
 				}
 
@@ -299,7 +299,7 @@ func (db *DataBase) newWorker(input chan string) {
 					go func(number string) {
 						inputCh <- number
 					}(number)
-					log.Printf("go number: %s, err: %s", number, err)
+					log.Printf("go number: %s, err: %s", number, err.Error())
 					resp.Body.Close()
 					cancel()
 					return
@@ -310,7 +310,7 @@ func (db *DataBase) newWorker(input chan string) {
 					go func(number string) {
 						inputCh <- number
 					}(number)
-					log.Printf("go number: %s, err: %s", number, err)
+					log.Printf("go number: %s, err: %s", number, err.Error())
 					resp.Body.Close()
 					cancel()
 					return
@@ -335,7 +335,7 @@ func (db *DataBase) newWorker(input chan string) {
 						go func(number string) {
 							inputCh <- number
 						}(number)
-						log.Printf("go number: %s, err: %s", number, err)
+						log.Printf("go number: %s, err: %s", number, err.Error())
 						resp.Body.Close()
 						cancel()
 						return
@@ -349,21 +349,21 @@ func (db *DataBase) newWorker(input chan string) {
 						go func(number string) {
 							inputCh <- number
 						}(number)
-						err := db.updateOrder(order)
+						err := db.updateOrder(order, cookie)
 						if err != nil {
-							log.Printf("go number: %s, err: %s", number, err)
+							log.Printf("go number: %s, err: %s", number, err.Error())
 							resp.Body.Close()
 							cancel()
 							return
 						}
 					case "INVALID", "PROCESSED":
 						log.Printf("go number: %s, status: %s, accrual: %g", number, order.Status, order.Accrual)
-						err := db.updateOrder(order)
+						err := db.updateOrder(order, cookie)
 						if err != nil {
 							go func(number string) {
 								inputCh <- number
 							}(number)
-							log.Printf("go number: %s, err: %s", number, err)
+							log.Printf("go number: %s, err: %s", number, err.Error())
 							resp.Body.Close()
 							cancel()
 							return
@@ -381,7 +381,7 @@ func (db *DataBase) newWorker(input chan string) {
 					}(number)
 					atoi, err := strconv.Atoi(resp.Header.Get("Retry-After"))
 					if err != nil {
-						log.Printf("go number: %s, err: %s", number, err)
+						log.Printf("go number: %s, err: %s", number, err.Error())
 						time.Sleep(time.Second * 15)
 					} else {
 						time.Sleep(time.Second * time.Duration(atoi))
@@ -393,12 +393,12 @@ func (db *DataBase) newWorker(input chan string) {
 					}(number)
 				case http.StatusNoContent:
 					log.Printf("go number: %s, status: %s", number, resp.Status)
-					err := db.updateOrder(Order{Status: "INVALID", Number: number})
+					err := db.updateOrder(Order{Status: "INVALID", Number: number}, cookie)
 					if err != nil {
 						go func(number string) {
 							inputCh <- number
 						}(number)
-						log.Printf("go number: %s, err: %s", number, err)
+						log.Printf("go number: %s, err: %s", number, err.Error())
 						resp.Body.Close()
 						cancel()
 						return
@@ -416,7 +416,12 @@ func (db *DataBase) newWorker(input chan string) {
 	}()
 }
 
-func (db *DataBase) updateOrder(order Order) error {
+func (db *DataBase) updateOrder(order Order, cookie string) error {
+	var login string
+	if err := db.DB.QueryRow(dbGetLogin, cookie).Scan(&login); err != nil {
+		return err
+	}
+
 	exec, err := db.DB.Exec(dbUpdateOrder, order.Status, order.Accrual, order.Number)
 	if err != nil {
 		return err
@@ -430,6 +435,15 @@ func (db *DataBase) updateOrder(order Order) error {
 	if affected == 0 {
 		return errors.New("failed update order")
 	}
+
+	var balance User
+	var current sql.NullFloat64
+	var withdraw sql.NullFloat64
+	if err := db.DB.QueryRow(dbGetBalance, login).Scan(&balance.Login, &current, &withdraw); err != nil {
+		return err
+	}
+
+	log.Print(current, withdraw)
 
 	log.Printf("update order: number: %s, status: %s, accrual: %g", order.Number, order.Status, order.Accrual)
 
