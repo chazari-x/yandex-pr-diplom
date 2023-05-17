@@ -260,6 +260,7 @@ func (c *Controller) PostLogin(w http.ResponseWriter, r *http.Request) {
 		status = http.StatusUnauthorized
 	}
 
+	w.Header().Set("Authorization", user.Login)
 	log.Printf("PostLogin: %d, cookie: %s, login: %s, password: %s", status, cookie, user.Login, user.Password)
 	w.WriteHeader(status)
 }
