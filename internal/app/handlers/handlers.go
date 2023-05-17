@@ -218,6 +218,7 @@ func (c *Controller) PostRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.Header().Set("Authorization", user.Login)
 	log.Printf("PostRegister: %d, cookie: %s, login: %s, password: %s", http.StatusOK, cookie, user.Login, user.Password)
 	w.WriteHeader(http.StatusOK)
 }
