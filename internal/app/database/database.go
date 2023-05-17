@@ -316,6 +316,8 @@ func (db *DataBase) newWorker(input chan string) {
 						return
 					}
 
+					order.Number = number
+
 					switch order.Status {
 					case "PROCESSING":
 						log.Printf("go number: %s, status: %s", number, order.Status)
