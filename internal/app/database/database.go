@@ -1,7 +1,6 @@
 package database
 
 import (
-	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -57,26 +56,26 @@ type WithDraw struct {
 }
 
 var (
-	dbCreateTables = `CREATE TABLE IF NOT EXISTS users (
-							userid			SERIAL  PRIMARY KEY NOT NULL,
-							login			VARCHAR UNIQUE		NOT NULL,
-							password		VARCHAR 			NOT NULL,
-							cookie			VARCHAR UNIQUE		NULL,
-							current			INTEGER 			NOT NULL	DEFAULT 0,
-							withdrawn		INTEGER 			NOT NULL	DEFAULT 0);
-
-					CREATE TABLE IF NOT EXISTS Orders (
-							number 			VARCHAR PRIMARY KEY NOT NULL,
-							login 			VARCHAR 			NOT NULL,
-							status 			VARCHAR 			NOT NULL	DEFAULT 'NEW',
-							accrual 		INTEGER 			NULL,
-							uploaded_at 	VARCHAR				NOT NULL);
-
-					CREATE TABLE IF NOT EXISTS withdraw (
-							orderID 		VARCHAR PRIMARY KEY NOT NULL,
-							login 			VARCHAR 			NOT NULL,
-							sum 			INTEGER 			NOT NULL,
-							processed_at	VARCHAR 			NOT NULL)`
+	//dbCreateTables = `CREATE TABLE IF NOT EXISTS users (
+	//						userid			SERIAL  PRIMARY KEY NOT NULL,
+	//						login			VARCHAR UNIQUE		NOT NULL,
+	//						password		VARCHAR 			NOT NULL,
+	//						cookie			VARCHAR UNIQUE		NULL,
+	//						current			INTEGER 			NOT NULL	DEFAULT 0,
+	//						withdrawn		INTEGER 			NOT NULL	DEFAULT 0);
+	//
+	//				CREATE TABLE IF NOT EXISTS Orders (
+	//						number 			VARCHAR PRIMARY KEY NOT NULL,
+	//						login 			VARCHAR 			NOT NULL,
+	//						status 			VARCHAR 			NOT NULL	DEFAULT 'NEW',
+	//						accrual 		INTEGER 			NULL,
+	//						uploaded_at 	VARCHAR				NOT NULL);
+	//
+	//				CREATE TABLE IF NOT EXISTS withdraw (
+	//						orderID 		VARCHAR PRIMARY KEY NOT NULL,
+	//						login 			VARCHAR 			NOT NULL,
+	//						sum 			INTEGER 			NOT NULL,
+	//						processed_at	VARCHAR 			NOT NULL)`
 
 	// Таблица пользователей users:
 	dbRegistration  = `INSERT INTO users (login, password, cookie) VALUES ($1, $2, $3) ON CONFLICT(login) DO NOTHING`
@@ -111,12 +110,12 @@ func StartDB(c config.Config) (*DataBase, error) {
 	//	return nil, err
 	//}
 
-	tableCtx, tableCancel := context.WithTimeout(context.Background(), time.Second)
-	defer tableCancel()
-	_, err = db.ExecContext(tableCtx, dbCreateTables)
-	if err != nil {
-		return nil, err
-	}
+	//tableCtx, tableCancel := context.WithTimeout(context.Background(), time.Second)
+	//defer tableCancel()
+	//_, err = db.ExecContext(tableCtx, dbCreateTables)
+	//if err != nil {
+	//	return nil, err
+	//}
 
 	var errs errs
 	errs.Used = errors.New("used")
