@@ -440,9 +440,9 @@ func (db *DataBase) GetOrders(cookie string) ([]Order, error) {
 			if !errors.Is(err, sql.ErrNoRows) {
 				return nil, err
 			}
-
-			order.Accrual = accrual.Float64
 		}
+
+		order.Accrual = accrual.Float64
 
 		orders = append(orders, order)
 	}
