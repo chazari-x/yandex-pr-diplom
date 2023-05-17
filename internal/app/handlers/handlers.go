@@ -374,11 +374,15 @@ func (c *Controller) GetOrders(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = w.Write(marshal)
+	wr, err := w.Write(marshal)
 	if err != nil {
 		log.Print("GetOrders: w write err: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
+	}
+
+	if wr == 0 {
+		w.WriteHeader(http.StatusNoContent)
 	}
 
 	log.Printf("GetOrders: %d, cookie: %s", http.StatusOK, cookie)
