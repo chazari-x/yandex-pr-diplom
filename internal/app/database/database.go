@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -13,13 +14,12 @@ import (
 	"time"
 
 	"github.com/chazari-x/yandex-pr-diplom/internal/app/config"
-	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/lib/pq"
 )
 
 type DataBase struct {
 	ASA string
-	DB  *pgxpool.Pool
+	DB  *sql.DB
 	Err errs
 }
 
@@ -100,33 +100,19 @@ var (
 )
 
 func StartDB(c config.Config) (*DataBase, error) {
-	parseConfig, err := pgxpool.ParseConfig(c.DataBaseURI)
+	db, err := sql.Open("postgres", c.DataBaseURI)
 	if err != nil {
+		return nil, fmt.Errorf("sql open err: %s", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	if err = db.PingContext(ctx); err != nil {
 		return nil, err
 	}
 
-	//ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	//defer cancel()
-
-	pool, err := pgxpool.NewWithConfig(context.Background(), parseConfig)
-	if err != nil {
-		return nil, err
-	}
-	//db, err := sql.Open("postgres", c.DataBaseURI)
-	//if err != nil {
-	//	return nil, fmt.Errorf("sql open err: %s", err)
-	//}
-
-	//ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	//defer cancel()
-	//
-	//if err = db.PingContext(ctx); err != nil {
-	//	return nil, err
-	//}
-
-	//tableCtx, tableCancel := context.WithTimeout(context.Background(), time.Second)
-	//defer tableCancel()
-	_, err = pool.Exec(context.Background(), dbCreateTables)
+	_, err = db.Exec(dbCreateTables)
 	if err != nil {
 		return nil, err
 	}
@@ -140,22 +126,22 @@ func StartDB(c config.Config) (*DataBase, error) {
 	errs.NoMoney = errors.New("no money")
 	errs.WrongData = errors.New("wrong data")
 
-	return &DataBase{ASA: c.AccrualSystemAddress, DB: pool, Err: errs}, nil
+	return &DataBase{ASA: c.AccrualSystemAddress, DB: db, Err: errs}, nil
 }
 
 func (db *DataBase) Register(login, pass, cookie string) error {
-	exec, err := db.DB.Exec(context.Background(), dbRegistration, login, pass, cookie)
+	exec, err := db.DB.Exec(dbRegistration, login, pass, cookie)
 	if err != nil {
 		if !strings.Contains(err.Error(), "duplicate key value violates unique constraint \"users_cookie_key\"") {
 			return err
 		}
 
-		_, err = db.DB.Exec(context.Background(), dbDellCookie, cookie)
+		_, err = db.DB.Exec(dbDellCookie, cookie)
 		if err != nil {
 			return err
 		}
 
-		_, err = db.DB.Exec(context.Background(), dbRegistration, login, pass, cookie)
+		_, err = db.DB.Exec(dbRegistration, login, pass, cookie)
 		if err != nil {
 			return err
 		}
@@ -163,7 +149,10 @@ func (db *DataBase) Register(login, pass, cookie string) error {
 		return nil
 	}
 
-	affected := exec.RowsAffected()
+	affected, err := exec.RowsAffected()
+	if err != nil {
+		return err
+	}
 
 	if affected == 0 {
 		return db.Err.RegisterConflict
@@ -174,7 +163,7 @@ func (db *DataBase) Register(login, pass, cookie string) error {
 
 func (db *DataBase) Login(login, pass, cookie string) error {
 	var cookieDB string
-	if err := db.DB.QueryRow(context.Background(), dbAuthorization, login, pass).Scan(&cookieDB); err != nil {
+	if err := db.DB.QueryRow(dbAuthorization, login, pass).Scan(&cookieDB); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return db.Err.WrongData
 		}
@@ -185,11 +174,11 @@ func (db *DataBase) Login(login, pass, cookie string) error {
 	}
 
 	if cookieDB != cookie {
-		if _, err := db.DB.Exec(context.Background(), dbDellCookie, cookie); err != nil {
+		if _, err := db.DB.Exec(dbDellCookie, cookie); err != nil {
 			return err
 		}
 
-		if _, err := db.DB.Exec(context.Background(), dbSetCookie, cookie, login, pass); err != nil {
+		if _, err := db.DB.Exec(dbSetCookie, cookie, login, pass); err != nil {
 			return err
 		}
 	}
@@ -199,7 +188,7 @@ func (db *DataBase) Login(login, pass, cookie string) error {
 
 func (db *DataBase) AddOrder(cookie string, order int) error {
 	var login string
-	if err := db.DB.QueryRow(context.Background(), dbGetLogin, cookie).Scan(&login); err != nil {
+	if err := db.DB.QueryRow(dbGetLogin, cookie).Scan(&login); err != nil {
 		if !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
@@ -207,16 +196,19 @@ func (db *DataBase) AddOrder(cookie string, order int) error {
 		return db.Err.NoAuthorization
 	}
 
-	exec, err := db.DB.Exec(context.Background(), dbAddOrder, order, login, time.Now().Format(time.RFC3339))
+	exec, err := db.DB.Exec(dbAddOrder, order, login, time.Now().Format(time.RFC3339))
 	if err != nil {
 		return err
 	}
 
-	affected := exec.RowsAffected()
+	affected, err := exec.RowsAffected()
+	if err != nil {
+		return err
+	}
 
 	if affected == 0 {
 		var orderLogin string
-		if err = db.DB.QueryRow(context.Background(), dbGetOrderLogin, order).Scan(&orderLogin); err != nil {
+		if err = db.DB.QueryRow(dbGetOrderLogin, order).Scan(&orderLogin); err != nil {
 			return err
 		}
 
@@ -357,7 +349,7 @@ func (db *DataBase) newWorker(input chan string) {
 }
 
 func (db *DataBase) updateOrder(order Order) error {
-	_, err := db.DB.Exec(context.Background(), dbUpdateOrder, order.Status, order.Accrual, order.Number)
+	_, err := db.DB.Exec(dbUpdateOrder, order.Status, order.Accrual, order.Number)
 	if err != nil {
 		return err
 	}
@@ -367,7 +359,7 @@ func (db *DataBase) updateOrder(order Order) error {
 
 func (db *DataBase) GetOrders(cookie string) ([]Order, error) {
 	var login string
-	if err := db.DB.QueryRow(context.Background(), dbGetLogin, cookie).Scan(&login); err != nil {
+	if err := db.DB.QueryRow(dbGetLogin, cookie).Scan(&login); err != nil {
 		if !errors.Is(err, sql.ErrNoRows) {
 			return nil, err
 		}
@@ -375,7 +367,7 @@ func (db *DataBase) GetOrders(cookie string) ([]Order, error) {
 		return nil, db.Err.NoAuthorization
 	}
 
-	rows, err := db.DB.Query(context.Background(), dbGetOrders, login)
+	rows, err := db.DB.Query(dbGetOrders, login)
 	if err != nil {
 		if !errors.Is(err, sql.ErrNoRows) {
 			return nil, err
@@ -412,7 +404,7 @@ func (db *DataBase) GetOrders(cookie string) ([]Order, error) {
 
 func (db *DataBase) GetBalance(cookie string) (User, error) {
 	var balance User
-	if err := db.DB.QueryRow(context.Background(), dbGetBalance, cookie).Scan(&balance.Login, &balance.Current, &balance.WithDraw); err != nil {
+	if err := db.DB.QueryRow(dbGetBalance, cookie).Scan(&balance.Login, &balance.Current, &balance.WithDraw); err != nil {
 		if !errors.Is(err, sql.ErrNoRows) {
 			return User{}, err
 		}
@@ -425,7 +417,7 @@ func (db *DataBase) GetBalance(cookie string) (User, error) {
 
 func (db *DataBase) AddWithDraw(cookie, order string, sum int) error {
 	var balance User
-	if err := db.DB.QueryRow(context.Background(), dbGetBalance, cookie).Scan(&balance.Login, &balance.Current, &balance.WithDraw); err != nil {
+	if err := db.DB.QueryRow(dbGetBalance, cookie).Scan(&balance.Login, &balance.Current, &balance.WithDraw); err != nil {
 		if !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
@@ -440,12 +432,12 @@ func (db *DataBase) AddWithDraw(cookie, order string, sum int) error {
 	balance.Current -= sum
 	balance.WithDraw += sum
 
-	_, err := db.DB.Exec(context.Background(), dbAddWithDraw, order, balance.Login, sum, time.Now().Format(time.RFC3339))
+	_, err := db.DB.Exec(dbAddWithDraw, order, balance.Login, sum, time.Now().Format(time.RFC3339))
 	if err != nil {
 		return err
 	}
 
-	_, err = db.DB.Exec(context.Background(), dbSetBalance, balance.Current, balance.WithDraw, cookie)
+	_, err = db.DB.Exec(dbSetBalance, balance.Current, balance.WithDraw, cookie)
 	if err != nil {
 		return err
 	}
@@ -455,7 +447,7 @@ func (db *DataBase) AddWithDraw(cookie, order string, sum int) error {
 
 func (db *DataBase) GetWithDraw(cookie string) ([]WithDraw, error) {
 	var login string
-	if err := db.DB.QueryRow(context.Background(), dbGetLogin, cookie).Scan(&login); err != nil {
+	if err := db.DB.QueryRow(dbGetLogin, cookie).Scan(&login); err != nil {
 		if !errors.Is(err, sql.ErrNoRows) {
 			return nil, err
 		}
@@ -463,7 +455,7 @@ func (db *DataBase) GetWithDraw(cookie string) ([]WithDraw, error) {
 		return nil, db.Err.NoAuthorization
 	}
 
-	rows, err := db.DB.Query(context.Background(), dbGetWithDraw, login)
+	rows, err := db.DB.Query(dbGetWithDraw, login)
 	if err != nil {
 		if !errors.Is(err, sql.ErrNoRows) {
 			return nil, err
