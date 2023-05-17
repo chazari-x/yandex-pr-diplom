@@ -41,10 +41,11 @@ func GetConfig() (Config, error) {
 	flag.StringVar(&C.AccrualSystemAddress, "r", C.AccrualSystemAddress, "accrual system address")
 	flag.StringVar(&C.DataBaseURI, "d", C.DataBaseURI, "database uri")
 	flag.Parse()
-	//if C.RunAddress == "" {
-	//	C.RunAddress = "localhost:8080"
-	//}
-	//
+
+	if C.RunAddress == "" {
+		C.RunAddress = "localhost:8080"
+	}
+
 	////if C.AccrualSystemAddress == "" {
 	////	return Config{}, errors.New("accrual system address is nil")
 	////}
