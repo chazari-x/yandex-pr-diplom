@@ -112,10 +112,10 @@ func StartDB(c config.Config) (*DataBase, error) {
 		return nil, err
 	}
 
-	_, err = db.Exec(dbCreateTables)
-	if err != nil {
-		return nil, err
-	}
+	//_, err = db.Exec(dbCreateTables)
+	//if err != nil {
+	//	return nil, err
+	//}
 
 	var errs errs
 	errs.Used = errors.New("used")
