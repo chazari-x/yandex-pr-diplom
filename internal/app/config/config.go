@@ -13,7 +13,7 @@ var C Config
 type Config struct {
 	RunAddress           string `env:"RUN_ADDRESS"`
 	AccrualSystemAddress string `env:"ACCRUAL_SYSTEM_ADDRESS"`
-	DataBaseURI          string `end:"DATABASE_URI"`
+	DataBaseURI          string `env:"DATABASE_URI"`
 }
 
 func GetConfig() (Config, error) {
