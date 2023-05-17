@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -100,7 +101,7 @@ var (
 func StartDB(c config.Config) (*DataBase, error) {
 	db, err := sql.Open("postgres", c.DataBaseURI)
 	if err != nil {
-		return nil, errors.New("asdasdsad")
+		return nil, fmt.Errorf("sql open err: %s", err)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)

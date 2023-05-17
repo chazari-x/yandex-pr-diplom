@@ -25,21 +25,21 @@ type flagConfig struct {
 }
 
 func init() {
-	f.RunAddress = flag.String("a", "localhost:8080", "run address")
+	f.RunAddress = flag.String("a", "", "run address")
 	f.AccrualSystemAddress = flag.String("r", "", "accrual system address")
 	f.DataBaseURI = flag.String("d", "", "database uri")
 }
 
 func GetConfig() (Config, error) {
-	err := env.Parse(&C)
-	if err != nil {
-		return Config{}, err
-	}
-
 	flag.Parse()
 	C.RunAddress = *f.RunAddress
 	C.AccrualSystemAddress = *f.AccrualSystemAddress
 	C.DataBaseURI = *f.DataBaseURI
+
+	err := env.Parse(&C)
+	if err != nil {
+		return Config{}, err
+	}
 
 	if C.RunAddress == "" {
 		C.RunAddress = "localhost:8080"
