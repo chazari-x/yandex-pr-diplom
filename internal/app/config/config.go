@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"flag"
 	"log"
 
@@ -42,8 +43,8 @@ func GetConfig() (Config, error) {
 	flag.StringVar(&C.DataBaseURI, "d", C.DataBaseURI, "database uri")
 	flag.Parse()
 
-	if C.RunAddress == "" {
-		C.RunAddress = "localhost:8080"
+	if C.RunAddress == "" || C.AccrualSystemAddress == "" || C.DataBaseURI == "" {
+		return Config{}, errors.New("error config")
 	}
 
 	////if C.AccrualSystemAddress == "" {
