@@ -289,6 +289,7 @@ func (db *DataBase) newWorker(input chan string) {
 						inputCh <- number
 					}(number)
 					log.Printf("go number: %s, err: %s", number, err.Error())
+					resp.Body.Close()
 					return
 				}
 
@@ -301,6 +302,8 @@ func (db *DataBase) newWorker(input chan string) {
 					resp.Body.Close()
 					return
 				}
+
+				resp.Body.Close()
 
 				var status = 0
 				if strings.Contains(resp.Status, "200") {
@@ -322,7 +325,6 @@ func (db *DataBase) newWorker(input chan string) {
 							inputCh <- number
 						}(number)
 						log.Printf("go number: %s, err: %s", number, err.Error())
-						resp.Body.Close()
 						return
 					}
 
@@ -331,14 +333,10 @@ func (db *DataBase) newWorker(input chan string) {
 					switch order.Status {
 					case "PROCESSING":
 						log.Printf("go number: %s, status: %s", number, order.Status)
-						go func(number string) {
-							inputCh <- number
-						}(number)
 						go func(number string, order Order) {
 							err := db.updateOrder(order)
 							if err != nil {
 								log.Printf("go number: %s, err: %s", number, err.Error())
-								resp.Body.Close()
 								return
 							}
 							inputCh <- number
@@ -350,7 +348,6 @@ func (db *DataBase) newWorker(input chan string) {
 							if err != nil {
 								inputCh <- number
 								log.Printf("go number: %s, err: %s", number, err.Error())
-								resp.Body.Close()
 								return
 							}
 						}(number, order)
@@ -384,7 +381,6 @@ func (db *DataBase) newWorker(input chan string) {
 						if err != nil {
 							inputCh <- number
 							log.Printf("go number: %s, err: %s", number, err.Error())
-							resp.Body.Close()
 							return
 						}
 					}(number)
@@ -394,8 +390,6 @@ func (db *DataBase) newWorker(input chan string) {
 						inputCh <- number
 					}(number)
 				}
-
-				resp.Body.Close()
 			}
 		}
 	}()
@@ -462,6 +456,8 @@ func (db *DataBase) GetOrders(cookie string) ([]Order, error) {
 	if orders == nil {
 		return nil, db.Err.Empty
 	}
+
+	log.Print(orders)
 
 	return orders, nil
 }
