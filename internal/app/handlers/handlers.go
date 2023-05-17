@@ -208,18 +208,21 @@ func (c *Controller) PostRegister(w http.ResponseWriter, r *http.Request) {
 	err = c.db.Register(user.Login, user.Password, cookie)
 	if err != nil {
 		if errors.Is(err, c.db.Err.RegisterConflict) {
-			log.Printf("PostRegister: %d, cookie: %s, login: %s, password: %s", http.StatusConflict, cookie, user.Login, user.Password)
+			log.Printf("PostRegister: %d, cookie: %s, login: %s, password: %s",
+				http.StatusConflict, cookie, user.Login, user.Password)
 			w.WriteHeader(http.StatusConflict)
 			return
 		}
 
-		log.Printf("PostRegister: %s, cookie: %s, login: %s, password: %s", err.Error(), cookie, user.Login, user.Password)
+		log.Printf("PostRegister: %s, cookie: %s, login: %s, password: %s",
+			err.Error(), cookie, user.Login, user.Password)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Authorization", user.Login)
-	log.Printf("PostRegister: %d, cookie: %s, login: %s, password: %s", http.StatusOK, cookie, user.Login, user.Password)
+	log.Printf("PostRegister: %d, cookie: %s, login: %s, password: %s",
+		http.StatusOK, cookie, user.Login, user.Password)
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -299,7 +302,7 @@ func (c *Controller) PostOrders(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if errors.Is(err, c.db.Err.BadOrderNumber) {
-			log.Printf("PostOrders: %d, cookie: %s, order: %d", 422, cookie, order)
+			log.Printf("PostOrders: %d, cookie: %s, order: %d", http.StatusUnprocessableEntity, cookie, order)
 			w.WriteHeader(http.StatusUnprocessableEntity)
 			return
 		}
@@ -378,12 +381,14 @@ func (c *Controller) GetBalance(w http.ResponseWriter, r *http.Request) {
 	balance, err := c.db.GetBalance(cookie)
 	if err != nil {
 		if errors.Is(err, c.db.Err.NoAuthorization) {
-			log.Printf("GetBalance: %d, cookie: %s, current: %g, withdrawn: %g", http.StatusUnauthorized, cookie, balance.Current, balance.WithDraw)
+			log.Printf("GetBalance: %d, cookie: %s, current: %g, withdrawn: %g",
+				http.StatusUnauthorized, cookie, balance.Current, balance.WithDraw)
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
 
-		log.Printf("GetBalance: %s, cookie: %s, current: %g, withdrawn: %g", err.Error(), cookie, balance.Current, balance.WithDraw)
+		log.Printf("GetBalance: %s, cookie: %s, current: %g, withdrawn: %g",
+			err.Error(), cookie, balance.Current, balance.WithDraw)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -402,7 +407,8 @@ func (c *Controller) GetBalance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("GetBalance: %d, cookie: %s, current: %g, withdrawn: %g", http.StatusOK, cookie, balance.Current, balance.WithDraw)
+	log.Printf("GetBalance: %d, cookie: %s, current: %g, withdrawn: %g",
+		http.StatusOK, cookie, balance.Current, balance.WithDraw)
 }
 
 type withdraw struct {
@@ -438,29 +444,34 @@ func (c *Controller) PostWithDraw(w http.ResponseWriter, r *http.Request) {
 	err = c.db.AddWithDraw(cookie, withdraw.Order, withdraw.Sum)
 	if err != nil {
 		if errors.Is(err, c.db.Err.NoAuthorization) {
-			log.Printf("PostWithDraw: %d, cookie: %s, order: %s, sum: %g", http.StatusUnauthorized, cookie, withdraw.Order, withdraw.Sum)
+			log.Printf("PostWithDraw: %d, cookie: %s, order: %s, sum: %g",
+				http.StatusUnauthorized, cookie, withdraw.Order, withdraw.Sum)
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
 
 		if errors.Is(err, c.db.Err.NoMoney) {
-			log.Printf("GetWithDraw: %d, cookie: %s", http.StatusPaymentRequired, cookie)
+			log.Printf("PostWithDraw: %d, cookie: %s, order: %s, sum: %g",
+				http.StatusPaymentRequired, cookie, withdraw.Order, withdraw.Sum)
 			w.WriteHeader(http.StatusPaymentRequired)
 			return
 		}
 
 		if errors.Is(err, c.db.Err.BadOrderNumber) {
-			log.Printf("GetWithDraw: %d, cookie: %s", http.StatusUnprocessableEntity, cookie)
+			log.Printf("PostWithDraw: %d, cookie: %s, order: %s, sum: %g",
+				http.StatusUnprocessableEntity, cookie, withdraw.Order, withdraw.Sum)
 			w.WriteHeader(http.StatusUnprocessableEntity)
 			return
 		}
 
-		log.Printf("PostWithDraw: %s, cookie: %s, order: %s, sum: %g", err.Error(), cookie, withdraw.Order, withdraw.Sum)
+		log.Printf("PostWithDraw: %s, cookie: %s, order: %s, sum: %g",
+			err.Error(), cookie, withdraw.Order, withdraw.Sum)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	log.Printf("PostWithDraw: %d, cookie: %s, order: %s, sum: %g", http.StatusOK, cookie, withdraw.Order, withdraw.Sum)
+	log.Printf("PostWithDraw: %d, cookie: %s, order: %s, sum: %g",
+		http.StatusOK, cookie, withdraw.Order, withdraw.Sum)
 	w.WriteHeader(http.StatusOK)
 }
 

@@ -12,8 +12,8 @@ var C Config
 
 type Config struct {
 	RunAddress           string `env:"RUN_ADDRESS"`
-	AccrualSystemAddress string `env:"ACCRUAL_SYSTEM_ADDRESS"`
 	DataBaseURI          string `env:"DATABASE_URI"`
+	AccrualSystemAddress string `env:"ACCRUAL_SYSTEM_ADDRESS"`
 }
 
 func GetConfig() (Config, error) {
@@ -22,8 +22,8 @@ func GetConfig() (Config, error) {
 	}
 
 	flag.StringVar(&C.RunAddress, "a", C.RunAddress, "run address")
-	flag.StringVar(&C.AccrualSystemAddress, "r", C.AccrualSystemAddress, "accrual system address")
 	flag.StringVar(&C.DataBaseURI, "d", C.DataBaseURI, "database uri")
+	flag.StringVar(&C.AccrualSystemAddress, "r", C.AccrualSystemAddress, "accrual system address")
 	flag.Parse()
 
 	if C.RunAddress == "" || C.AccrualSystemAddress == "" || C.DataBaseURI == "" {
