@@ -220,7 +220,7 @@ func (db *DataBase) AddOrder(cookie string, order int) error {
 		return db.Err.Duplicate
 	}
 
-	db.getOrderInfo(string(rune(order)))
+	db.getOrderInfo(strconv.Itoa(order))
 
 	return nil
 }
@@ -229,11 +229,12 @@ const workersCount = 1
 
 var workers = 0
 
+var inputCh = make(chan string)
+
 func (db *DataBase) getOrderInfo(number string) {
-	inputCh := make(chan string)
-	go func() {
+	go func(number string) {
 		inputCh <- number
-	}()
+	}(number)
 
 	if workers < workersCount {
 		for i := workers; i < workersCount; i++ {
@@ -245,6 +246,8 @@ func (db *DataBase) getOrderInfo(number string) {
 
 func (db *DataBase) newWorker(input chan string) {
 	go func() {
+		log.Print("starting goroutine")
+
 		defer func() {
 			db.newWorker(input)
 			if x := recover(); x != nil {
@@ -254,65 +257,122 @@ func (db *DataBase) newWorker(input chan string) {
 
 		for {
 			for number := range input {
-				resp, err := http.Get("http://" + db.ASA + "/api/orders/" + number)
+				req, err := http.NewRequest("GET", "http://"+db.ASA+"/api/orders/"+number, nil)
 				if err != nil {
-					input <- number
-					log.Print(err)
+					go func(number string) {
+						inputCh <- number
+					}(number)
+					log.Printf("go number: %s, err: %s", number, err)
+					return
+				}
+
+				ctx, cancel := context.WithTimeout(req.Context(), time.Second)
+				req = req.WithContext(ctx)
+				client := http.DefaultClient
+				resp, err := client.Do(req)
+				if err != nil {
+					go func(number string) {
+						inputCh <- number
+					}(number)
+					log.Printf("go number: %s, err: %s", number, err)
+					resp.Body.Close()
+					cancel()
 					return
 				}
 
 				b, err := io.ReadAll(resp.Body)
 				if err != nil {
-					input <- number
-					log.Print(err)
+					go func(number string) {
+						inputCh <- number
+					}(number)
+					log.Printf("go number: %s, err: %s", number, err)
+					resp.Body.Close()
+					cancel()
 					return
 				}
 
-				resp.Body.Close()
-
-				log.Printf("go: %s, number: %s", resp.Status, number)
 				switch resp.Status {
 				case "200":
 					var order Order
 					err = json.Unmarshal(b, &order)
 					if err != nil {
-						input <- number
-						log.Print(err)
+						go func(number string) {
+							inputCh <- number
+						}(number)
+						log.Printf("go number: %s, err: %s", number, err)
+						resp.Body.Close()
+						cancel()
 						return
 					}
 
+					log.Printf("go number: %s, status: %s", number, order.Status)
 					switch order.Status {
 					case "PROCESSING":
-						input <- number
+
+						go func(number string) {
+							inputCh <- number
+						}(number)
 						err := db.updateOrder(order)
 						if err != nil {
-							log.Print(err)
+							log.Printf("go number: %s, err: %s", number, err)
+							resp.Body.Close()
+							cancel()
 							return
 						}
 					case "INVALID", "PROCESSED":
 						err := db.updateOrder(order)
 						if err != nil {
-							input <- number
-							log.Print(err)
+							go func(number string) {
+								inputCh <- number
+							}(number)
+							log.Printf("go number: %s, err: %s", number, err)
+							resp.Body.Close()
+							cancel()
 							return
 						}
 					default:
-						input <- number
+						go func(number string) {
+							inputCh <- number
+						}(number)
 					}
-				//case "204":
 				case "429":
-					input <- number
+					log.Printf("go number: %s, status: %s", number, resp.Status)
+					go func(number string) {
+						inputCh <- number
+					}(number)
 					atoi, err := strconv.Atoi(resp.Header.Get("Retry-After"))
 					if err != nil {
-						log.Print(err)
-						time.Sleep(time.Second * 60)
+						log.Printf("go number: %s, err: %s", number, err)
+						time.Sleep(time.Second * 15)
 					} else {
 						time.Sleep(time.Second * time.Duration(atoi))
 					}
 				case "500":
-					input <- number
+					log.Printf("go number: %s, status: %s", number, resp.Status)
+					go func(number string) {
+						inputCh <- number
+					}(number)
+				case "204":
+					log.Printf("go number: %s, status: %s", number, resp.Status)
+					err := db.updateOrder(Order{Status: "INVALID", Number: number})
+					if err != nil {
+						go func(number string) {
+							inputCh <- number
+						}(number)
+						log.Printf("go number: %s, err: %s", number, err)
+						resp.Body.Close()
+						cancel()
+						return
+					}
+				default:
+					log.Printf("go number: %s, status: %s", number, resp.Status)
 				}
+
+				resp.Body.Close()
+				cancel()
 			}
+
+			time.Sleep(time.Second)
 		}
 	}()
 }
