@@ -417,7 +417,6 @@ func (db *DataBase) newWorker(input chan string) {
 }
 
 func (db *DataBase) updateOrder(order Order) error {
-	log.Printf("updating order: number: %s, status: %s, accrual: %g", order.Number, order.Status, order.Accrual)
 	exec, err := db.DB.Exec(dbUpdateOrder, order.Status, order.Accrual, order.Number)
 	if err != nil {
 		return err
@@ -431,6 +430,8 @@ func (db *DataBase) updateOrder(order Order) error {
 	if affected == 0 {
 		return errors.New("failed update order")
 	}
+
+	log.Printf("update order: number: %s, status: %s, accrual: %g", order.Number, order.Status, order.Accrual)
 
 	return nil
 }
@@ -523,7 +524,6 @@ func (db *DataBase) AddWithDraw(cookie, order string, sum float64) error {
 	}
 
 	balance.Current = current.Float64
-	balance.WithDraw = withdraw.Float64
 	if balance.Current < sum {
 		return db.Err.NoMoney
 	}
