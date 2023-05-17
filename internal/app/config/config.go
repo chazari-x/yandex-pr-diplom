@@ -16,38 +16,38 @@ type Config struct {
 	DataBaseURI          string `end:"DATABASE_URI"`
 }
 
-var f flagConfig
+//var f flagConfig
 
-type flagConfig struct {
-	RunAddress           *string
-	AccrualSystemAddress *string
-	DataBaseURI          *string
-}
+//type flagConfig struct {
+//	RunAddress           *string
+//	AccrualSystemAddress *string
+//	DataBaseURI          *string
+//}
 
-func init() {
-	f.RunAddress = flag.String("a", "", "run address")
-	f.AccrualSystemAddress = flag.String("r", "", "accrual system address")
-	f.DataBaseURI = flag.String("d", "", "database uri")
-}
+//
+//func init() {
+//	f.RunAddress = flag.String("a", "asd", "run address")
+//	f.AccrualSystemAddress = flag.String("r", "", "accrual system address")
+//	f.DataBaseURI = flag.String("d", "", "database uri")
+//}
 
 func GetConfig() (Config, error) {
-	flag.Parse()
-	C.RunAddress = *f.RunAddress
-	C.AccrualSystemAddress = *f.AccrualSystemAddress
-	C.DataBaseURI = *f.DataBaseURI
-
 	err := env.Parse(&C)
 	if err != nil {
 		return Config{}, err
 	}
 
-	if C.RunAddress == "" {
-		C.RunAddress = "localhost:8080"
-	}
-
-	//if C.AccrualSystemAddress == "" {
-	//	return Config{}, errors.New("accrual system address is nil")
+	flag.StringVar(&C.RunAddress, "a", C.RunAddress, "run address")
+	flag.StringVar(&C.AccrualSystemAddress, "r", C.AccrualSystemAddress, "accrual system address")
+	flag.StringVar(&C.DataBaseURI, "d", C.DataBaseURI, "database uri")
+	flag.Parse()
+	//if C.RunAddress == "" {
+	//	C.RunAddress = "localhost:8080"
 	//}
+	//
+	////if C.AccrualSystemAddress == "" {
+	////	return Config{}, errors.New("accrual system address is nil")
+	////}
 
 	log.Print(C)
 
