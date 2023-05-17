@@ -225,7 +225,7 @@ func (db *DataBase) AddOrder(cookie string, order int) error {
 	return nil
 }
 
-const workersCount = 5
+const workersCount = 1
 
 var workers = 0
 
@@ -242,8 +242,8 @@ func (db *DataBase) getOrderInfo(number string) {
 	//for _, fanOutCh := range fanOutChs {
 	if workers < workersCount {
 		for i := workers; i < workersCount; i++ {
-			db.newWorker(inputCh)
 			workers++
+			db.newWorker(inputCh)
 		}
 	}
 	//}
@@ -283,20 +283,15 @@ func (db *DataBase) getOrderInfo(number string) {
 
 func (db *DataBase) newWorker(input chan string) {
 	go func() {
-		var resp *http.Response
-		var err error
-
 		defer func() {
-			resp.Body.Close()
 			db.newWorker(input)
-
 			if x := recover(); x != nil {
 				log.Print("run time panic: ", x)
 			}
 		}()
 
 		for number := range input {
-			resp, err = http.Get("http://" + db.ASA + "/api/orders/" + number)
+			resp, err := http.Get("http://" + db.ASA + "/api/orders/" + number)
 			if err != nil {
 				input <- number
 				log.Print(err)
@@ -309,6 +304,8 @@ func (db *DataBase) newWorker(input chan string) {
 				log.Print(err)
 				return
 			}
+
+			resp.Body.Close()
 
 			switch resp.Status {
 			case "200":
