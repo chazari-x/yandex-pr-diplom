@@ -83,8 +83,9 @@ var (
 	dbAuthorization = `SELECT cookie FROM users WHERE login = $1 AND password = $2`
 	dbGetLogin      = `SELECT login FROM users WHERE cookie = $1`
 	dbGetBalance    = `SELECT login, 
-						(select sum(accrual) from orders where login = $1 group by login) - (select sum(sum) from withdraw where login = $1 group by login),
-						(select sum(sum) from withdraw where login = $1 group by login) 
+						(SELECT SUM(accrual) FROM orders WHERE login = $1 GROUP BY login) -
+						GREATEST(0, (SELECT SUM(sum) FROM withdraw WHERE login = $1 GROUP BY login)),
+						(SELECT SUM(sum) FROM withdraw WHERE login = $1 GROUP BY login) 
 						FROM users WHERE login = $1`
 	dbDellCookie = `UPDATE users SET cookie = NULL WHERE cookie = $1`
 	dbSetCookie  = `UPDATE users SET cookie = $1 WHERE login = $2 AND password = $3`
@@ -522,16 +523,16 @@ func (db *DataBase) GetBalance(cookie string) (User, error) {
 	}
 
 	var balance User
-	//var current sql.NullFloat64
-	//var withdraw sql.NullFloat64
+	var current sql.NullFloat64
+	var withdraw sql.NullFloat64
 	if err := db.DB.QueryRow(dbGetBalance, login).Scan(&balance.Login, &balance.Current, &balance.WithDraw); err != nil {
 		return User{}, err
 	}
 
-	//log.Print(current, withdraw)
-	//
-	//balance.Current = current.Float64
-	//balance.WithDraw = withdraw.Float64
+	log.Print(current, withdraw)
+
+	balance.Current = current.Float64
+	balance.WithDraw = withdraw.Float64
 
 	return balance, nil
 }
