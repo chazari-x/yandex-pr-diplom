@@ -231,55 +231,15 @@ var workers = 0
 
 func (db *DataBase) getOrderInfo(number string) {
 	inputCh := make(chan string)
+	inputCh <- number
 
-	go func() {
-		inputCh <- number
-
-		//close(inputCh)
-	}()
-
-	//fanOutChs := db.fanOut(inputCh, workersCount)
-	//for _, fanOutCh := range fanOutChs {
 	if workers < workersCount {
 		for i := workers; i < workersCount; i++ {
 			workers++
 			db.newWorker(inputCh)
 		}
 	}
-	//}
 }
-
-//func (db *DataBase) fanOut(inputCh chan string, n int) []chan string {
-//	chs := make([]chan string, 0, n)
-//	for i := 0; i < n; i++ {
-//		ch := make(chan string)
-//		chs = append(chs, ch)
-//	}
-//
-//	go func() {
-//		defer func(chs []chan string) {
-//			for _, ch := range chs {
-//				close(ch)
-//			}
-//		}(chs)
-//
-//		for i := 0; ; i++ {
-//			if i == len(chs) {
-//				i = 0
-//			}
-//
-//			number, ok := <-inputCh
-//			if !ok {
-//				return
-//			}
-//
-//			ch := chs[i]
-//			ch <- number
-//		}
-//	}()
-//
-//	return chs
-//}
 
 func (db *DataBase) newWorker(input chan string) {
 	go func() {
@@ -290,63 +250,66 @@ func (db *DataBase) newWorker(input chan string) {
 			}
 		}()
 
-		for number := range input {
-			resp, err := http.Get("http://" + db.ASA + "/api/orders/" + number)
-			if err != nil {
-				input <- number
-				log.Print(err)
-				return
-			}
-
-			b, err := io.ReadAll(resp.Body)
-			if err != nil {
-				input <- number
-				log.Print(err)
-				return
-			}
-
-			resp.Body.Close()
-
-			switch resp.Status {
-			case "200":
-				var order Order
-				err = json.Unmarshal(b, &order)
+		for {
+			for number := range input {
+				resp, err := http.Get("http://" + db.ASA + "/api/orders/" + number)
 				if err != nil {
 					input <- number
 					log.Print(err)
 					return
 				}
 
-				switch order.Status {
-				case "PROCESSING":
+				b, err := io.ReadAll(resp.Body)
+				if err != nil {
 					input <- number
-					err := db.updateOrder(order)
-					if err != nil {
-						log.Print(err)
-						return
-					}
-				case "INVALID", "PROCESSED":
-					err := db.updateOrder(order)
+					log.Print(err)
+					return
+				}
+
+				resp.Body.Close()
+
+				log.Printf("go: %s, number: %s", resp.Status, number)
+				switch resp.Status {
+				case "200":
+					var order Order
+					err = json.Unmarshal(b, &order)
 					if err != nil {
 						input <- number
 						log.Print(err)
 						return
 					}
-				default:
+
+					switch order.Status {
+					case "PROCESSING":
+						input <- number
+						err := db.updateOrder(order)
+						if err != nil {
+							log.Print(err)
+							return
+						}
+					case "INVALID", "PROCESSED":
+						err := db.updateOrder(order)
+						if err != nil {
+							input <- number
+							log.Print(err)
+							return
+						}
+					default:
+						input <- number
+					}
+				//case "204":
+				case "429":
+					input <- number
+					atoi, err := strconv.Atoi(resp.Header.Get("Retry-After"))
+					if err != nil {
+						log.Print(err)
+						time.Sleep(time.Second * 60)
+					} else {
+						time.Sleep(time.Second * time.Duration(atoi))
+					}
+				case "500":
 					input <- number
 				}
-			//case "204":
-			case "429":
-				input <- number
-				atoi, err := strconv.Atoi(resp.Header.Get("Retry-After"))
-				if err != nil {
-					log.Print(err)
-					time.Sleep(time.Second * 60)
-				} else {
-					time.Sleep(time.Second * time.Duration(atoi))
-				}
-			case "500":
-				input <- number
 			}
 		}
 	}()
