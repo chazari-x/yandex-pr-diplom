@@ -257,7 +257,7 @@ func (db *DataBase) newWorker(input chan string) {
 
 		for {
 			for number := range input {
-				req, err := http.NewRequest("GET", "http://"+db.ASA+"/api/orders/"+number, nil)
+				req, err := http.NewRequest("GET", db.ASA+"/api/orders/"+number, nil)
 				if err != nil {
 					go func(number string) {
 						inputCh <- number
