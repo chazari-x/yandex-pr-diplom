@@ -1,6 +1,7 @@
 package database
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -104,15 +105,18 @@ func StartDB(c config.Config) (*DataBase, error) {
 		return nil, fmt.Errorf("sql open err: %s", err)
 	}
 
-	//err = db.Ping()
-	//if err != nil {
-	//	return nil, err
-	//}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
 
-	//_, err = db.Exec(dbCreateTables)
-	//if err != nil {
-	//	return nil, err
-	//}
+	err = db.PingContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = db.Exec(dbCreateTables)
+	if err != nil {
+		return nil, err
+	}
 
 	var errs errs
 	errs.Used = errors.New("used")

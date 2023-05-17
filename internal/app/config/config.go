@@ -3,7 +3,6 @@ package config
 import (
 	"errors"
 	"flag"
-	"log"
 
 	"github.com/caarlos0/env/v6"
 	_ "github.com/lib/pq"
@@ -16,21 +15,6 @@ type Config struct {
 	AccrualSystemAddress string `env:"ACCRUAL_SYSTEM_ADDRESS"`
 	DataBaseURI          string `end:"DATABASE_URI"`
 }
-
-//var f flagConfig
-
-//type flagConfig struct {
-//	RunAddress           *string
-//	AccrualSystemAddress *string
-//	DataBaseURI          *string
-//}
-
-//
-//func init() {
-//	f.RunAddress = flag.String("a", "asd", "run address")
-//	f.AccrualSystemAddress = flag.String("r", "", "accrual system address")
-//	f.DataBaseURI = flag.String("d", "", "database uri")
-//}
 
 func GetConfig() (Config, error) {
 	err := env.Parse(&C)
@@ -46,12 +30,6 @@ func GetConfig() (Config, error) {
 	if C.RunAddress == "" || C.AccrualSystemAddress == "" || C.DataBaseURI == "" {
 		return Config{}, errors.New("error config")
 	}
-
-	////if C.AccrualSystemAddress == "" {
-	////	return Config{}, errors.New("accrual system address is nil")
-	////}
-
-	log.Print(C)
 
 	return C, nil
 }
