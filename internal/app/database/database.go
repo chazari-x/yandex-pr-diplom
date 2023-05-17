@@ -31,6 +31,7 @@ type errs struct {
 	Used             error
 	NoMoney          error
 	WrongData        error
+	BadOrderNumber   error
 }
 
 type User struct {
@@ -62,11 +63,9 @@ var (
 							userid			SERIAL  PRIMARY KEY NOT NULL,
 							login			VARCHAR UNIQUE		NOT NULL,
 							password		VARCHAR 			NOT NULL,
-							cookie			VARCHAR UNIQUE		NULL,
-							current			NUMERIC 			NOT NULL	DEFAULT 0,
-							withdrawn		NUMERIC 			NOT NULL	DEFAULT 0);
+							cookie			VARCHAR UNIQUE		NULL);
 	
-					CREATE TABLE IF NOT EXISTS Orders (
+					CREATE TABLE IF NOT EXISTS orders (
 							number 			VARCHAR PRIMARY KEY NOT NULL,
 							login 			VARCHAR 			NOT NULL,
 							status 			VARCHAR 			NOT NULL	DEFAULT 'NEW',
@@ -83,10 +82,12 @@ var (
 	dbRegistration  = `INSERT INTO users (login, password, cookie) VALUES ($1, $2, $3) ON CONFLICT(login) DO NOTHING`
 	dbAuthorization = `SELECT cookie FROM users WHERE login = $1 AND password = $2`
 	dbGetLogin      = `SELECT login FROM users WHERE cookie = $1`
-	dbGetBalance    = `SELECT login, current, withdrawn FROM users WHERE cookie = $1`
-	dbDellCookie    = `UPDATE users SET cookie = NULL WHERE cookie = $1`
-	dbSetCookie     = `UPDATE users SET cookie = $1 WHERE login = $2 AND password = $3`
-	dbSetBalance    = `UPDATE users SET current = $1, withdrawn = $2 WHERE cookie = $3`
+	dbGetBalance    = `SELECT login, 
+						(select sum(accrual) from orders where login = $1 group by login) - (select sum(sum) from withdraw where login = $1 group by login),
+						(select sum(sum) from withdraw where login = $1 group by login) 
+						FROM users WHERE login = $1`
+	dbDellCookie = `UPDATE users SET cookie = NULL WHERE cookie = $1`
+	dbSetCookie  = `UPDATE users SET cookie = $1 WHERE login = $2 AND password = $3`
 
 	// Таблица заказов orders:
 	dbAddOrder      = `INSERT INTO orders (number, login, uploaded_at) VALUES ($1, $2, $3) ON CONFLICT(number) DO NOTHING`
@@ -121,11 +122,12 @@ func StartDB(c config.Config) (*DataBase, error) {
 	var errs errs
 	errs.Used = errors.New("used")
 	errs.Empty = errors.New("empty")
+	errs.NoMoney = errors.New("no money")
 	errs.Duplicate = errors.New("duplicate")
+	errs.WrongData = errors.New("wrong data")
+	errs.BadOrderNumber = errors.New("bad order number")
 	errs.NoAuthorization = errors.New("no authorization")
 	errs.RegisterConflict = errors.New("register conflict")
-	errs.NoMoney = errors.New("no money")
-	errs.WrongData = errors.New("wrong data")
 
 	return &DataBase{ASA: c.AccrualSystemAddress, DB: db, Err: errs}, nil
 }
@@ -197,6 +199,10 @@ func (db *DataBase) AddOrder(cookie string, order int) error {
 		return db.Err.NoAuthorization
 	}
 
+	if !checkOrderNumber(order) {
+		return db.Err.BadOrderNumber
+	}
+
 	exec, err := db.DB.Exec(dbAddOrder, order, login, time.Now().Format(time.RFC3339))
 	if err != nil {
 		return err
@@ -223,6 +229,25 @@ func (db *DataBase) AddOrder(cookie string, order int) error {
 	db.getOrderInfo(strconv.Itoa(order))
 
 	return nil
+}
+
+var t = [...]int{0, 2, 4, 6, 8, 1, 3, 5, 7, 9}
+
+func checkOrderNumber(number int) bool {
+	s := strconv.Itoa(number)
+	odd := len(s) & 1
+	var sum int
+	for i, c := range s {
+		if c < '0' || c > '9' {
+			return false
+		}
+		if i&1 == odd {
+			sum += t[c-'0']
+		} else {
+			sum += int(c - '0')
+		}
+	}
+	return sum%10 == 0
 }
 
 const workersCount = 1
@@ -392,10 +417,19 @@ func (db *DataBase) newWorker(input chan string) {
 }
 
 func (db *DataBase) updateOrder(order Order) error {
-	log.Print("updating order: ", order)
-	_, err := db.DB.Exec(dbUpdateOrder, order.Status, order.Accrual, order.Number)
+	log.Printf("updating order: number: %s, status: %s, accrual: %g", order.Number, order.Status, order.Accrual)
+	exec, err := db.DB.Exec(dbUpdateOrder, order.Status, order.Accrual, order.Number)
 	if err != nil {
 		return err
+	}
+
+	affected, err := exec.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	if affected == 0 {
+		return errors.New("failed update order")
 	}
 
 	return nil
@@ -447,8 +481,8 @@ func (db *DataBase) GetOrders(cookie string) ([]Order, error) {
 }
 
 func (db *DataBase) GetBalance(cookie string) (User, error) {
-	var balance User
-	if err := db.DB.QueryRow(dbGetBalance, cookie).Scan(&balance.Login, &balance.Current, &balance.WithDraw); err != nil {
+	var login string
+	if err := db.DB.QueryRow(dbGetLogin, cookie).Scan(&login); err != nil {
 		if !errors.Is(err, sql.ErrNoRows) {
 			return User{}, err
 		}
@@ -456,12 +490,22 @@ func (db *DataBase) GetBalance(cookie string) (User, error) {
 		return User{}, db.Err.NoAuthorization
 	}
 
+	var balance User
+	var current sql.NullFloat64
+	var withdraw sql.NullFloat64
+	if err := db.DB.QueryRow(dbGetBalance, login).Scan(&balance.Login, &current, &withdraw); err != nil {
+		return User{}, err
+	}
+
+	balance.Current = current.Float64
+	balance.WithDraw = withdraw.Float64
+
 	return balance, nil
 }
 
 func (db *DataBase) AddWithDraw(cookie, order string, sum float64) error {
-	var balance User
-	if err := db.DB.QueryRow(dbGetBalance, cookie).Scan(&balance.Login, &balance.Current, &balance.WithDraw); err != nil {
+	var login string
+	if err := db.DB.QueryRow(dbGetLogin, cookie).Scan(&login); err != nil {
 		if !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
@@ -469,21 +513,31 @@ func (db *DataBase) AddWithDraw(cookie, order string, sum float64) error {
 		return db.Err.NoAuthorization
 	}
 
+	var balance User
+	var current sql.NullFloat64
+	var withdraw sql.NullFloat64
+	if err := db.DB.QueryRow(dbGetBalance, login).Scan(&balance.Login, &current, &withdraw); err != nil {
+		return err
+	}
+
+	balance.Current = current.Float64
+	balance.WithDraw = withdraw.Float64
 	if balance.Current < sum {
 		return db.Err.NoMoney
 	}
 
-	balance.Current -= sum
-	balance.WithDraw += sum
-
-	_, err := db.DB.Exec(dbAddWithDraw, order, balance.Login, sum, time.Now().Format(time.RFC3339))
+	exec, err := db.DB.Exec(dbAddWithDraw, order, balance.Login, sum, time.Now().Format(time.RFC3339))
 	if err != nil {
 		return err
 	}
 
-	_, err = db.DB.Exec(dbSetBalance, balance.Current, balance.WithDraw, cookie)
+	affected, err := exec.RowsAffected()
 	if err != nil {
 		return err
+	}
+
+	if affected == 0 {
+		return db.Err.BadOrderNumber
 	}
 
 	return nil

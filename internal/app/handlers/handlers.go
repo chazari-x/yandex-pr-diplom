@@ -12,7 +12,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -53,7 +52,7 @@ func gzipMiddleware(next http.Handler) http.Handler {
 		if strings.Contains(r.Header.Get("Content-Encoding"), "gzip") {
 			gz, err := gzip.NewReader(r.Body)
 			if err != nil {
-				log.Print("gzipMiddleware: new reader err: ", err)
+				log.Print("gzipMiddleware: new reader err: ", err.Error())
 				w.WriteHeader(http.StatusInternalServerError)
 				return
 			}
@@ -72,7 +71,7 @@ func gzipMiddleware(next http.Handler) http.Handler {
 
 		gz, err := gzip.NewWriterLevel(w, gzip.BestSpeed)
 		if err != nil {
-			log.Print("gzipMiddleware: new writer level err: ", err)
+			log.Print("gzipMiddleware: new writer level err: ", err.Error())
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -137,14 +136,14 @@ func cookieMiddleware(next http.Handler) http.Handler {
 		cookie, err := r.Cookie(userIdentification)
 		if err != nil {
 			if !errors.Is(err, http.ErrNoCookie) {
-				log.Print("cookieMiddleware: r.Cookie err: ", err)
+				log.Print("cookieMiddleware: r.Cookie err: ", err.Error())
 				w.WriteHeader(http.StatusInternalServerError)
 				return
 			}
 
 			uid, err = setCookie(w)
 			if err != nil {
-				log.Print("cookieMiddleware: set user identification err: ", err)
+				log.Print("cookieMiddleware: set user identification err: ", err.Error())
 				w.WriteHeader(http.StatusInternalServerError)
 				return
 			}
@@ -176,25 +175,6 @@ func setCookie(w http.ResponseWriter) (string, error) {
 	return uid, nil
 }
 
-var t = [...]int{0, 2, 4, 6, 8, 1, 3, 5, 7, 9}
-
-func checkOrderNumber(number int) bool {
-	s := strconv.Itoa(number)
-	odd := len(s) & 1
-	var sum int
-	for i, c := range s {
-		if c < '0' || c > '9' {
-			return false
-		}
-		if i&1 == odd {
-			sum += t[c-'0']
-		} else {
-			sum += int(c - '0')
-		}
-	}
-	return sum%10 == 0
-}
-
 type userStruct struct {
 	Login    string `json:"login"`
 	Password string `json:"password"`
@@ -207,7 +187,7 @@ func (c *Controller) PostRegister(w http.ResponseWriter, r *http.Request) {
 
 	b, err := io.ReadAll(r.Body)
 	if err != nil {
-		log.Print("PostRegister: read all err: ", err)
+		log.Print("PostRegister: read all err: ", err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -220,7 +200,7 @@ func (c *Controller) PostRegister(w http.ResponseWriter, r *http.Request) {
 	user := userStruct{}
 	err = json.Unmarshal(b, &user)
 	if err != nil {
-		log.Print("PostRegister: json unmarshal err: ", err)
+		log.Print("PostRegister: json unmarshal err: ", err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -233,7 +213,7 @@ func (c *Controller) PostRegister(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		log.Printf("PostRegister: %s, cookie: %s, login: %s, password: %s", err, cookie, user.Login, user.Password)
+		log.Printf("PostRegister: %s, cookie: %s, login: %s, password: %s", err.Error(), cookie, user.Login, user.Password)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -249,7 +229,7 @@ func (c *Controller) PostLogin(w http.ResponseWriter, r *http.Request) {
 
 	b, err := io.ReadAll(r.Body)
 	if err != nil {
-		log.Print("PostLogin: read all err: ", err)
+		log.Print("PostLogin: read all err: ", err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -262,7 +242,7 @@ func (c *Controller) PostLogin(w http.ResponseWriter, r *http.Request) {
 	user := userStruct{}
 	err = json.Unmarshal(b, &user)
 	if err != nil {
-		log.Print("PostLogin: json unmarshal err: ", err)
+		log.Print("PostLogin: json unmarshal err: ", err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -271,7 +251,7 @@ func (c *Controller) PostLogin(w http.ResponseWriter, r *http.Request) {
 	err = c.db.Login(user.Login, user.Password, cookie)
 	if err != nil {
 		if !errors.Is(err, c.db.Err.WrongData) {
-			log.Printf("PostLogin: %s, login: %s, password: %s", err, user.Login, user.Password)
+			log.Printf("PostLogin: %s, login: %s, password: %s", err.Error(), user.Login, user.Password)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -290,7 +270,7 @@ func (c *Controller) PostOrders(w http.ResponseWriter, r *http.Request) {
 
 	b, err := io.ReadAll(r.Body)
 	if err != nil {
-		log.Print("PostOrders: read all err: ", err)
+		log.Print("PostOrders: read all err: ", err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -303,14 +283,8 @@ func (c *Controller) PostOrders(w http.ResponseWriter, r *http.Request) {
 	var order int
 	err = json.Unmarshal(b, &order)
 	if err != nil {
-		log.Print("PostOrders: json unmarshal err: ", err)
+		log.Print("PostOrders: json unmarshal err: ", err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	if !checkOrderNumber(order) {
-		log.Printf("PostOrders: %d, cookie: %s, order: %d", 422, cookie, order)
-		w.WriteHeader(http.StatusUnprocessableEntity)
 		return
 	}
 
@@ -319,6 +293,12 @@ func (c *Controller) PostOrders(w http.ResponseWriter, r *http.Request) {
 		if errors.Is(err, c.db.Err.NoAuthorization) {
 			log.Printf("PostOrders: %d, cookie: %s, order: %d", http.StatusUnauthorized, cookie, order)
 			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+
+		if errors.Is(err, c.db.Err.BadOrderNumber) {
+			log.Printf("PostOrders: %d, cookie: %s, order: %d", 422, cookie, order)
+			w.WriteHeader(http.StatusUnprocessableEntity)
 			return
 		}
 
@@ -334,7 +314,7 @@ func (c *Controller) PostOrders(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		log.Print("PostOrders: add order err: ", err)
+		log.Print("PostOrders: add order err: ", err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -362,21 +342,21 @@ func (c *Controller) GetOrders(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		log.Printf("GetOrders: %d, cookie: %s", err, cookie)
+		log.Printf("GetOrders: %d, cookie: %s", err.Error(), cookie)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
 	marshal, err := json.Marshal(orders)
 	if err != nil {
-		log.Print("GetOrders: json marshal err: ", err)
+		log.Print("GetOrders: json marshal err: ", err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
 	wr, err := w.Write(marshal)
 	if err != nil {
-		log.Print("GetOrders: w write err: ", err)
+		log.Print("GetOrders: w write err: ", err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -401,21 +381,21 @@ func (c *Controller) GetBalance(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		log.Printf("GetBalance: %d, cookie: %s, current: %g, withdrawn: %g", err, cookie, balance.Current, balance.WithDraw)
+		log.Printf("GetBalance: %s, cookie: %s, current: %g, withdrawn: %g", err.Error(), cookie, balance.Current, balance.WithDraw)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
 	marshal, err := json.Marshal(balance)
 	if err != nil {
-		log.Print("GetBalance: json marshal err: ", err)
+		log.Print("GetBalance: json marshal err: ", err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
 	_, err = w.Write(marshal)
 	if err != nil {
-		log.Print("GetBalance: w write err: ", err)
+		log.Print("GetBalance: w write err: ", err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -435,7 +415,7 @@ func (c *Controller) PostWithDraw(w http.ResponseWriter, r *http.Request) {
 
 	b, err := io.ReadAll(r.Body)
 	if err != nil {
-		log.Print("PostWithDraw: read all err: ", err)
+		log.Print("PostWithDraw: read all err: ", err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -448,7 +428,7 @@ func (c *Controller) PostWithDraw(w http.ResponseWriter, r *http.Request) {
 	withdraw := withdraw{}
 	err = json.Unmarshal(b, &withdraw)
 	if err != nil {
-		log.Print("PostWithDraw: json unmarshal err: ", err)
+		log.Print("PostWithDraw: json unmarshal err: ", err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -467,7 +447,13 @@ func (c *Controller) PostWithDraw(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		log.Printf("PostWithDraw: %s, cookie: %s, order: %s, sum: %g", err, cookie, withdraw.Order, withdraw.Sum)
+		if errors.Is(err, c.db.Err.BadOrderNumber) {
+			log.Printf("GetWithDraw: %d, cookie: %s", http.StatusUnprocessableEntity, cookie)
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return
+		}
+
+		log.Printf("PostWithDraw: %s, cookie: %s, order: %s, sum: %g", err.Error(), cookie, withdraw.Order, withdraw.Sum)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -494,21 +480,21 @@ func (c *Controller) GetWithDrawAls(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		log.Print("GetWithDraw: add order err: ", err)
+		log.Print("GetWithDraw: add order err: ", err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
 	marshal, err := json.Marshal(withdraw)
 	if err != nil {
-		log.Print("GetWithDraw: json marshal err: ", err)
+		log.Print("GetWithDraw: json marshal err: ", err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
 	_, err = w.Write(marshal)
 	if err != nil {
-		log.Print("GetWithDraw: w write err: ", err)
+		log.Print("GetWithDraw: w write err: ", err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
