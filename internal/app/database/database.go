@@ -83,7 +83,7 @@ var (
 	dbAuthorization = `SELECT cookie FROM users WHERE login = $1 AND password = $2`
 	dbGetLogin      = `SELECT login FROM users WHERE cookie = $1`
 	dbGetBalance    = `SELECT login, 
-						(SELECT SUM(accrual) FROM orders WHERE login = $1 GROUP BY login) -
+						GREATEST(0, (SELECT SUM(accrual) FROM orders WHERE login = $1 GROUP BY login)) -
 						GREATEST(0, (SELECT SUM(sum) FROM withdraw WHERE login = $1 GROUP BY login)),
 						(SELECT SUM(sum) FROM withdraw WHERE login = $1 GROUP BY login) 
 						FROM users WHERE login = $1`
