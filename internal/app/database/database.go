@@ -405,6 +405,9 @@ func (db *DataBase) newWorker(input chan string, cookie string) {
 					}
 				default:
 					log.Printf("go number: %s, status: %s", number, resp.Status)
+					go func(number string) {
+						inputCh <- number
+					}(number)
 				}
 
 				resp.Body.Close()
