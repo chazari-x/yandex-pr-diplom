@@ -318,14 +318,20 @@ func (db *DataBase) newWorker(input chan string) {
 				}
 
 				switch order.Status {
-				case "INVALID", "PROCESSING", "PROCESSED":
+				case "PROCESSING":
+					input <- number
+					err := db.updateOrder(order)
+					if err != nil {
+						log.Print(err)
+						return
+					}
+				case "INVALID", "PROCESSED":
 					err := db.updateOrder(order)
 					if err != nil {
 						input <- number
 						log.Print(err)
 						return
 					}
-
 				default:
 					input <- number
 				}
