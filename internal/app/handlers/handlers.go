@@ -175,25 +175,25 @@ func setCookie(w http.ResponseWriter) (string, error) {
 	return uid, nil
 }
 
-func checkOrderNumber(number int) bool {
-	var luhn int
-
-	for i := 0; number > 0; i++ {
-		cur := number % 10
-
-		if i%2 == 0 { // even
-			cur = cur * 2
-			if cur > 9 {
-				cur = cur%10 + cur/10
-			}
-		}
-
-		luhn += cur
-		number = number / 10
-	}
-
-	return (luhn % 10) == 0
-}
+//func checkOrderNumber(number int) bool {
+//	var luhn int
+//
+//	for i := 0; number > 0; i++ {
+//		cur := number % 10
+//
+//		if i%2 == 0 { // even
+//			cur = cur * 2
+//			if cur > 9 {
+//				cur = cur%10 + cur/10
+//			}
+//		}
+//
+//		luhn += cur
+//		number = number / 10
+//	}
+//
+//	return (luhn % 10) == 0
+//}
 
 type userStruct struct {
 	Login    string `json:"login"`
@@ -308,11 +308,11 @@ func (c *Controller) PostOrders(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !checkOrderNumber(order) {
-		log.Printf("PostOrders: %d, cookie: %s, order: %d", 422, cookie, order)
-		w.WriteHeader(http.StatusUnprocessableEntity)
-		return
-	}
+	//if !checkOrderNumber(order) {
+	//	log.Printf("PostOrders: %d, cookie: %s, order: %d", 422, cookie, order)
+	//	w.WriteHeader(http.StatusUnprocessableEntity)
+	//	return
+	//}
 
 	err = c.db.AddOrder(cookie, order)
 	if err != nil {
