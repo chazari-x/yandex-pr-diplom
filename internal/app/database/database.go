@@ -497,6 +497,8 @@ func (db *DataBase) GetBalance(cookie string) (User, error) {
 		return User{}, err
 	}
 
+	log.Print(current, withdraw)
+
 	balance.Current = current.Float64
 	balance.WithDraw = withdraw.Float64
 

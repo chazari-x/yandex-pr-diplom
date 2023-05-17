@@ -342,7 +342,7 @@ func (c *Controller) GetOrders(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		log.Printf("GetOrders: %d, cookie: %s", err.Error(), cookie)
+		log.Printf("GetOrders: %s, cookie: %s", err.Error(), cookie)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
