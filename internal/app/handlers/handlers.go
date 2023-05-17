@@ -420,8 +420,8 @@ func (c *Controller) GetBalance(w http.ResponseWriter, r *http.Request) {
 }
 
 type withdraw struct {
-	Order string `json:"order"`
-	Sum   int    `json:"sum"`
+	Order string  `json:"order"`
+	Sum   float64 `json:"sum"`
 }
 
 func (c *Controller) PostWithDraw(w http.ResponseWriter, r *http.Request) {

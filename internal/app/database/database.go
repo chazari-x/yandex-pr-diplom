@@ -34,27 +34,27 @@ type errs struct {
 }
 
 type User struct {
-	UserID   string `json:"user_id,omitempty"`
-	Login    string `json:"login,omitempty"`
-	Password string `json:"password,omitempty"`
-	Cookie   string `json:"cookie,omitempty"`
-	Current  int    `json:"current"`
-	WithDraw int    `json:"withdrawn"`
+	UserID   string  `json:"user_id,omitempty"`
+	Login    string  `json:"login,omitempty"`
+	Password string  `json:"password,omitempty"`
+	Cookie   string  `json:"cookie,omitempty"`
+	Current  float64 `json:"current"`
+	WithDraw float64 `json:"withdrawn"`
 }
 
 type Order struct {
-	Number     string `json:"number"`
-	Login      string `json:"login,omitempty"`
-	Status     string `json:"status"`
-	Accrual    int    `json:"accrual,omitempty"`
-	UploadedAt string `json:"uploaded_at,omitempty"`
+	Number     string  `json:"number"`
+	Login      string  `json:"login,omitempty"`
+	Status     string  `json:"status"`
+	Accrual    float64 `json:"accrual,omitempty"`
+	UploadedAt string  `json:"uploaded_at,omitempty"`
 }
 
 type WithDraw struct {
-	OrderID     string `json:"order_id"`
-	Login       string `json:"login,omitempty"`
-	Sum         int    `json:"sum"`
-	ProcessedAt string `json:"processed_at"`
+	OrderID     string  `json:"order_id"`
+	Login       string  `json:"login,omitempty"`
+	Sum         float64 `json:"sum"`
+	ProcessedAt string  `json:"processed_at"`
 }
 
 var (
@@ -63,20 +63,20 @@ var (
 							login			VARCHAR UNIQUE		NOT NULL,
 							password		VARCHAR 			NOT NULL,
 							cookie			VARCHAR UNIQUE		NULL,
-							current			INTEGER 			NOT NULL	DEFAULT 0,
-							withdrawn		INTEGER 			NOT NULL	DEFAULT 0);
+							current			NUMERIC 			NOT NULL	DEFAULT 0,
+							withdrawn		NUMERIC 			NOT NULL	DEFAULT 0);
 	
 					CREATE TABLE IF NOT EXISTS Orders (
 							number 			VARCHAR PRIMARY KEY NOT NULL,
 							login 			VARCHAR 			NOT NULL,
 							status 			VARCHAR 			NOT NULL	DEFAULT 'NEW',
-							accrual 		INTEGER 			NULL,
+							accrual 		NUMERIC 			NULL,
 							uploaded_at 	VARCHAR				NOT NULL);
 	
 					CREATE TABLE IF NOT EXISTS withdraw (
 							orderID 		VARCHAR PRIMARY KEY NOT NULL,
 							login 			VARCHAR 			NOT NULL,
-							sum 			INTEGER 			NOT NULL,
+							sum 			NUMERIC 			NOT NULL,
 							processed_at	VARCHAR 			NOT NULL);`
 
 	// Таблица пользователей users:
@@ -375,14 +375,14 @@ func (db *DataBase) GetOrders(cookie string) ([]Order, error) {
 	var orders []Order
 	for rows.Next() {
 		var order Order
-		var accrual sql.NullInt64
+		var accrual sql.NullFloat64
 		if err = rows.Scan(&order.Number, &order.Status, &accrual, &order.UploadedAt); err != nil {
 			if !errors.Is(err, sql.ErrNoRows) {
 				return nil, err
 			}
 
 			if accrual.Valid {
-				order.Accrual = int(accrual.Int64)
+				order.Accrual = accrual.Float64
 			}
 		}
 
@@ -413,7 +413,7 @@ func (db *DataBase) GetBalance(cookie string) (User, error) {
 	return balance, nil
 }
 
-func (db *DataBase) AddWithDraw(cookie, order string, sum int) error {
+func (db *DataBase) AddWithDraw(cookie, order string, sum float64) error {
 	var balance User
 	if err := db.DB.QueryRow(dbGetBalance, cookie).Scan(&balance.Login, &balance.Current, &balance.WithDraw); err != nil {
 		if !errors.Is(err, sql.ErrNoRows) {
