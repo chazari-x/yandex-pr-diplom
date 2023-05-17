@@ -110,13 +110,11 @@ func StartDB(c config.Config) (*DataBase, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	err = db.PingContext(ctx)
-	if err != nil {
+	if db.PingContext(ctx) != nil {
 		return nil, err
 	}
 
-	_, err = db.Exec(dbCreateTables)
-	if err != nil {
+	if _, err = db.Exec(dbCreateTables); err != nil {
 		return nil, err
 	}
 
@@ -140,13 +138,11 @@ func (db *DataBase) Register(login, pass, cookie string) error {
 			return err
 		}
 
-		_, err = db.DB.Exec(dbDellCookie, cookie)
-		if err != nil {
+		if _, err = db.DB.Exec(dbDellCookie, cookie); err != nil {
 			return err
 		}
 
-		_, err = db.DB.Exec(dbRegistration, login, pass, cookie)
-		if err != nil {
+		if _, err = db.DB.Exec(dbRegistration, login, pass, cookie); err != nil {
 			return err
 		}
 
@@ -427,9 +423,7 @@ func (db *DataBase) GetOrders(cookie string) ([]Order, error) {
 
 	rows, err := db.DB.Query(dbGetOrders, login)
 	if err != nil {
-		if !errors.Is(err, sql.ErrNoRows) {
-			return nil, err
-		}
+		return nil, err
 	}
 
 	var orders []Order
@@ -452,8 +446,6 @@ func (db *DataBase) GetOrders(cookie string) ([]Order, error) {
 	if orders == nil {
 		return nil, db.Err.Empty
 	}
-
-	log.Print(orders)
 
 	return orders, nil
 }
