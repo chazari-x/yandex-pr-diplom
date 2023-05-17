@@ -414,8 +414,6 @@ func (db *DataBase) newWorker(input chan string) {
 				resp.Body.Close()
 				cancel()
 			}
-
-			time.Sleep(time.Second)
 		}
 	}()
 }
