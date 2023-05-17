@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/chazari-x/yandex-pr-diplom/internal/app/config"
+	_ "github.com/lib/pq"
 )
 
 type DataBase struct {
