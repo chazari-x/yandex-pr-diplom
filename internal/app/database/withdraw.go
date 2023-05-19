@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"log"
 	"strings"
 	"time"
 )
@@ -18,16 +19,18 @@ type WithDraw struct {
 var (
 	// Таблица операций withdraw:
 	dbGetWithDraw = `SELECT orderID, sum, processed_at FROM withdraw WHERE login = $1`
-	dbAddWithDraw = `insert into withdraw select $1, $2, $3, $4
-						where not COALESCE((SELECT SUM(accrual) FROM orders WHERE login = $2 GROUP BY login), 0) -
-						COALESCE((SELECT SUM(sum) FROM withdraw WHERE login = $2 GROUP BY login), 0) - $3 < 0;`
+	dbAddWithDraw = `INSERT INTO withdraw SELECT $1, $2, $3, $4
+						WHERE NOT COALESCE((SELECT SUM(accrual) FROM orders WHERE login = $5 GROUP BY login), 0) -
+						COALESCE((SELECT SUM(sum) FROM withdraw WHERE login = $5 GROUP BY login), 0) - $3 < 0`
 )
 
 func (db *DataBase) AddWithDraw(login, order string, sum float64) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	exec, err := db.DB.ExecContext(ctx, dbAddWithDraw, order, login, sum, time.Now().Format(time.RFC3339))
+	log.Print(login)
+
+	exec, err := db.DB.ExecContext(ctx, dbAddWithDraw, order, login, sum, time.Now().Format(time.RFC3339), login)
 	if err != nil {
 		if !strings.Contains(err.Error(), "duplicate key value violates unique constraint \"withdraw_pkey\"") {
 			return err

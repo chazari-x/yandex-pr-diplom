@@ -32,11 +32,11 @@ func StartWorker(conf config.Config, db *database.DataBase) (chan OrderStr, erro
 	}
 
 	go func(orders []string) {
-		for _, order := range orders {
-			InputCh <- OrderStr{
-				Number: order,
-			}
-		}
+		//for _, order := range orders {
+		//	InputCh <- OrderStr{
+		//		Number: order,
+		//	}
+		//}
 	}(orders)
 
 	c := &Controller{c: conf, db: db}
