@@ -149,6 +149,9 @@ func (c *Controller) newWorker() {
 							err := c.db.UpdateOrder(o.Number, "PROCESSING", 0)
 							if err != nil {
 								log.Printf("go number: %s, err: %s", o.Number, err.Error())
+								go func(o OrderStr) {
+									InputCh <- o
+								}(o)
 								return
 							}
 							o.Status = "PROCESSING"
