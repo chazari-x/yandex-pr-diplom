@@ -7,8 +7,10 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strconv"
 
 	"github.com/chazari-x/yandex-pr-diplom/internal/app/database"
+	"github.com/chazari-x/yandex-pr-diplom/internal/app/worker"
 )
 
 type userStruct struct {
@@ -177,6 +179,10 @@ func (c *Controller) PostOrders(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+
+	go func() {
+		c.worker <- worker.OrderStr{Number: strconv.Itoa(order), Status: "NEW"}
+	}()
 
 	log.Printf("PostOrders: %d, cookie: %s, order: %d", http.StatusAccepted, cookie, order)
 	w.WriteHeader(http.StatusAccepted)

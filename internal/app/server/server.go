@@ -27,12 +27,12 @@ func StartServer() error {
 		log.Print("DB closed")
 	}()
 
-	err = worker.StartWorker(conf, db)
+	w, err := worker.StartWorker(conf, db)
 	if err != nil {
 		return err
 	}
 
-	c := handlers.NewController(conf, db)
+	c := handlers.NewController(conf, db, w)
 
 	r := chi.NewRouter()
 

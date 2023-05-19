@@ -6,8 +6,6 @@ import (
 	"log"
 	"strconv"
 	"time"
-
-	"github.com/chazari-x/yandex-pr-diplom/internal/app/worker"
 )
 
 type Order struct {
@@ -62,7 +60,6 @@ func (db *DataBase) AddOrder(login string, order int) error {
 	}
 
 	if affected != 0 {
-		worker.AddOrder(strconv.Itoa(order))
 		return nil
 	}
 
