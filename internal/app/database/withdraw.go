@@ -19,8 +19,8 @@ var (
 	// Таблица операций withdraw:
 	dbGetWithDraw = `SELECT orderID, sum, processed_at FROM withdraw WHERE login = $1`
 	dbAddWithDraw = `insert into withdraw select $1, $2, $3, $4
-						where not COALESCE((SELECT SUM(accrual) FROM orders WHERE login = 'username' GROUP BY login), 0) -
-						COALESCE((SELECT SUM(sum) FROM withdraw WHERE login = 'username' GROUP BY login), 0) - $3 < 0;`
+						where not COALESCE((SELECT SUM(accrual) FROM orders WHERE login = $2 GROUP BY login), 0) -
+						COALESCE((SELECT SUM(sum) FROM withdraw WHERE login = $2 GROUP BY login), 0) - $3 < 0;`
 )
 
 func (db *DataBase) AddWithDraw(login, order string, sum float64) error {
