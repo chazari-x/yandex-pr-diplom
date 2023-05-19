@@ -23,9 +23,9 @@ var (
 	dbSetCookie     = `UPDATE users SET cookie = $1 WHERE login = $2 AND password = $3`
 	dbGetLogin      = `SELECT login FROM users WHERE cookie = $1`
 	dbGetBalance    = `SELECT login, 
-						GREATEST(0, (SELECT SUM(accrual) FROM orders WHERE login = $1 GROUP BY login)) -
-						GREATEST(0, (SELECT SUM(sum) FROM withdraw WHERE login = $1 GROUP BY login)),
-						(SELECT SUM(sum) FROM withdraw WHERE login = $1 GROUP BY login) 
+						COALESCE((SELECT SUM(accrual) FROM orders WHERE login = $1 GROUP BY login), 0) -
+						COALESCE((SELECT SUM(sum) FROM withdraw WHERE login = $1 GROUP BY login), 0),
+						COALESCE((SELECT SUM(sum) FROM withdraw WHERE login = $1 GROUP BY login), 0)
 						FROM users WHERE login = $1`
 )
 
@@ -45,7 +45,7 @@ func (db *DataBase) Register(login, pass, cookie string) error {
 	}
 
 	if affected == 0 {
-		return db.Err.RegisterConflict
+		return RegisterConflict
 	}
 
 	return nil
@@ -55,7 +55,7 @@ func (db *DataBase) Login(login, pass, cookie string) error {
 	var cookieDB string
 	if err := db.DB.QueryRow(dbAuthorization, login, pass).Scan(&cookieDB); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return db.Err.WrongData
+			return WrongData
 		}
 
 		if !strings.Contains(err.Error(), "name \"cookie\": converting NULL to string is unsupported") {
@@ -76,25 +76,24 @@ func (db *DataBase) Login(login, pass, cookie string) error {
 	return nil
 }
 
-func (db *DataBase) GetBalance(cookie string) (User, error) {
+func (db *DataBase) Authentication(cookie string) (string, error) {
 	var login string
 	if err := db.DB.QueryRow(dbGetLogin, cookie).Scan(&login); err != nil {
 		if !errors.Is(err, sql.ErrNoRows) {
-			return User{}, err
+			return "", err
 		}
 
-		return User{}, db.Err.NoAuthorization
+		return "", nil
 	}
 
+	return login, nil
+}
+
+func (db *DataBase) GetBalance(login string) (User, error) {
 	var balance User
-	var current sql.NullFloat64
-	var withdraw sql.NullFloat64
-	if err := db.DB.QueryRow(dbGetBalance, login).Scan(&balance.Login, &current, &withdraw); err != nil {
+	if err := db.DB.QueryRow(dbGetBalance, login).Scan(&balance.Login, &balance.Current, &balance.WithDraw); err != nil {
 		return User{}, err
 	}
-
-	balance.Current = current.Float64
-	balance.WithDraw = withdraw.Float64
 
 	return balance, nil
 }

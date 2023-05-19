@@ -1,14 +1,12 @@
 package database
 
 import (
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"io"
 	"log"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 )
 
@@ -23,7 +21,7 @@ type Order struct {
 var (
 	// Таблица заказов orders:
 	dbAddOrder      = `INSERT INTO orders (number, login, uploaded_at) VALUES ($1, $2, $3) ON CONFLICT(number) DO NOTHING`
-	dbGetOrders     = `SELECT number, status, accrual, uploaded_at FROM orders WHERE login = $1`
+	dbGetOrders     = `SELECT number, status, COALESCE(accrual, 0), uploaded_at FROM orders WHERE login = $1`
 	dbUpdateOrder   = `UPDATE orders SET status = $1, accrual = $2 WHERE number = $3`
 	dbGetOrderLogin = `SELECT login FROM orders WHERE number = $1`
 )
@@ -47,18 +45,9 @@ func checkOrderNumber(number int) bool {
 	return sum%10 == 0
 }
 
-func (db *DataBase) AddOrder(cookie string, order int) error {
-	var login string
-	if err := db.DB.QueryRow(dbGetLogin, cookie).Scan(&login); err != nil {
-		if !errors.Is(err, sql.ErrNoRows) {
-			return err
-		}
-
-		return db.Err.NoAuthorization
-	}
-
+func (db *DataBase) AddOrder(login string, order int) error {
 	if !checkOrderNumber(order) {
-		return db.Err.BadOrderNumber
+		return BadOrderNumber
 	}
 
 	exec, err := db.DB.Exec(dbAddOrder, order, login, time.Now().Format(time.RFC3339))
@@ -71,29 +60,22 @@ func (db *DataBase) AddOrder(cookie string, order int) error {
 		return err
 	}
 
-	if affected == 0 {
-		var orderLogin string
-		if err = db.DB.QueryRow(dbGetOrderLogin, order).Scan(&orderLogin); err != nil {
-			return err
-		}
-
-		if orderLogin != login {
-			return db.Err.Used
-		}
-
-		return db.Err.Duplicate
+	if affected != 0 {
+		db.getOrderInfo(strconv.Itoa(order))
+		return nil
 	}
 
-	db.getOrderInfo(strconv.Itoa(order))
+	var orderLogin string
+	if err = db.DB.QueryRow(dbGetOrderLogin, order).Scan(&orderLogin); err != nil {
+		return err
+	}
 
-	return nil
+	if orderLogin != login {
+		return Used
+	}
+
+	return Duplicate
 }
-
-const workersCount = 1
-
-var workers = 0
-
-var inputCh = make(chan orderStr)
 
 type orderStr struct {
 	number string
@@ -102,15 +84,8 @@ type orderStr struct {
 
 func (db *DataBase) getOrderInfo(number string) {
 	go func(number string) {
-		inputCh <- orderStr{number: number, status: "NEW"}
+		db.inputCh <- orderStr{number: number, status: "NEW"}
 	}(number)
-
-	if workers < workersCount {
-		for i := workers; i < workersCount; i++ {
-			workers++
-			db.newWorker(inputCh)
-		}
-	}
 }
 
 func (db *DataBase) newWorker(input chan orderStr) {
@@ -126,49 +101,38 @@ func (db *DataBase) newWorker(input chan orderStr) {
 
 		for {
 			for o := range input {
-				resp, err := http.Get(db.ASA + "/api/orders/" + o.number)
+				resp, err := http.Get(db.asa + "/api/orders/" + o.number)
 				if err != nil {
 					go func(o orderStr) {
-						inputCh <- o
+						db.inputCh <- o
 					}(o)
 					log.Printf("go number: %s, err: %s", o.number, err.Error())
 					resp.Body.Close()
-					return
+					continue
 				}
 
 				b, err := io.ReadAll(resp.Body)
 				if err != nil {
 					go func(o orderStr) {
-						inputCh <- o
+						db.inputCh <- o
 					}(o)
 					log.Printf("go number: %s, err: %s", o.number, err.Error())
 					resp.Body.Close()
-					return
+					continue
 				}
 
 				resp.Body.Close()
 
-				var status = 0
-				if strings.Contains(resp.Status, "200") {
-					status = http.StatusOK
-				} else if strings.Contains(resp.Status, "429") {
-					status = http.StatusTooManyRequests
-				} else if strings.Contains(resp.Status, "500") {
-					status = http.StatusInternalServerError
-				} else if strings.Contains(resp.Status, "204") {
-					status = http.StatusNoContent
-				}
-
-				switch status {
+				switch resp.StatusCode {
 				case http.StatusOK:
 					var order Order
 					err = json.Unmarshal(b, &order)
 					if err != nil {
 						go func(o orderStr) {
-							inputCh <- o
+							db.inputCh <- o
 						}(o)
 						log.Printf("go number: %s, err: %s", o.number, err.Error())
-						return
+						continue
 					}
 
 					order.Number = o.number
@@ -185,7 +149,7 @@ func (db *DataBase) newWorker(input chan orderStr) {
 								}
 								o.status = "PROCESSING"
 							}
-							inputCh <- o
+							db.inputCh <- o
 						}(o, order)
 					case "INVALID", "PROCESSED":
 						log.Printf("go number: %s, status: %s, accrual: %g", o.number, order.Status, order.Accrual)
@@ -194,7 +158,7 @@ func (db *DataBase) newWorker(input chan orderStr) {
 								err := db.updateOrder(order)
 								if err != nil {
 									o.status = order.Status
-									inputCh <- o
+									db.inputCh <- o
 									log.Printf("go number: %s, err: %s", o.number, err.Error())
 									return
 								}
@@ -203,13 +167,13 @@ func (db *DataBase) newWorker(input chan orderStr) {
 					default:
 						log.Printf("go number: %s, status: %s", o.number, order.Status)
 						go func(o orderStr) {
-							inputCh <- o
+							db.inputCh <- o
 						}(o)
 					}
 				case http.StatusTooManyRequests:
 					log.Printf("go number: %s, status: %s", o.number, resp.Status)
 					go func(o orderStr) {
-						inputCh <- o
+						db.inputCh <- o
 					}(o)
 					atoi, err := strconv.Atoi(resp.Header.Get("Retry-After"))
 					if err != nil {
@@ -221,7 +185,7 @@ func (db *DataBase) newWorker(input chan orderStr) {
 				case http.StatusInternalServerError:
 					log.Printf("go number: %s, status: %s", o.number, resp.Status)
 					go func(o orderStr) {
-						inputCh <- o
+						db.inputCh <- o
 					}(o)
 				case http.StatusNoContent:
 					log.Printf("go number: %s, status: %s", o.number, resp.Status)
@@ -234,12 +198,12 @@ func (db *DataBase) newWorker(input chan orderStr) {
 							}
 							o.status = "PROCESSING"
 						}
-						inputCh <- o
+						db.inputCh <- o
 					}(o)
 				default:
 					log.Printf("go number: %s, status: %s", o.number, resp.Status)
 					go func(o orderStr) {
-						inputCh <- o
+						db.inputCh <- o
 					}(o)
 				}
 			}
@@ -267,16 +231,7 @@ func (db *DataBase) updateOrder(order Order) error {
 	return nil
 }
 
-func (db *DataBase) GetOrders(cookie string) ([]Order, error) {
-	var login string
-	if err := db.DB.QueryRow(dbGetLogin, cookie).Scan(&login); err != nil {
-		if !errors.Is(err, sql.ErrNoRows) {
-			return nil, err
-		}
-
-		return nil, db.Err.NoAuthorization
-	}
-
+func (db *DataBase) GetOrders(login string) ([]Order, error) {
 	rows, err := db.DB.Query(dbGetOrders, login)
 	if err != nil {
 		return nil, err
@@ -285,12 +240,9 @@ func (db *DataBase) GetOrders(cookie string) ([]Order, error) {
 	var orders []Order
 	for rows.Next() {
 		var order Order
-		var accrual sql.NullFloat64
-		if err = rows.Scan(&order.Number, &order.Status, &accrual, &order.UploadedAt); err != nil {
+		if err = rows.Scan(&order.Number, &order.Status, &order.Accrual, &order.UploadedAt); err != nil {
 			return nil, err
 		}
-
-		order.Accrual = accrual.Float64
 
 		orders = append(orders, order)
 	}
@@ -300,7 +252,7 @@ func (db *DataBase) GetOrders(cookie string) ([]Order, error) {
 	}
 
 	if orders == nil {
-		return nil, db.Err.Empty
+		return nil, Empty
 	}
 
 	return orders, nil

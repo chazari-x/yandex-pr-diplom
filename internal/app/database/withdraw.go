@@ -19,26 +19,14 @@ var (
 	dbGetWithDraw = `SELECT orderID, sum, processed_at FROM withdraw WHERE login = $1`
 )
 
-func (db *DataBase) AddWithDraw(cookie, order string, sum float64) error {
-	var login string
-	if err := db.DB.QueryRow(dbGetLogin, cookie).Scan(&login); err != nil {
-		if !errors.Is(err, sql.ErrNoRows) {
-			return err
-		}
-
-		return db.Err.NoAuthorization
-	}
-
+func (db *DataBase) AddWithDraw(login, order string, sum float64) error {
 	var balance User
-	var current sql.NullFloat64
-	var withdraw sql.NullFloat64
-	if err := db.DB.QueryRow(dbGetBalance, login).Scan(&balance.Login, &current, &withdraw); err != nil {
+	if err := db.DB.QueryRow(dbGetBalance, login).Scan(&balance.Login, &balance.Current, &balance.WithDraw); err != nil {
 		return err
 	}
 
-	balance.Current = current.Float64
 	if balance.Current < sum {
-		return db.Err.NoMoney
+		return NoMoney
 	}
 
 	exec, err := db.DB.Exec(dbAddWithDraw, order, balance.Login, sum, time.Now().Format(time.RFC3339))
@@ -52,22 +40,13 @@ func (db *DataBase) AddWithDraw(cookie, order string, sum float64) error {
 	}
 
 	if affected == 0 {
-		return db.Err.BadOrderNumber
+		return BadOrderNumber
 	}
 
 	return nil
 }
 
-func (db *DataBase) GetWithDraw(cookie string) ([]WithDraw, error) {
-	var login string
-	if err := db.DB.QueryRow(dbGetLogin, cookie).Scan(&login); err != nil {
-		if !errors.Is(err, sql.ErrNoRows) {
-			return nil, err
-		}
-
-		return nil, db.Err.NoAuthorization
-	}
-
+func (db *DataBase) GetWithDraw(login string) ([]WithDraw, error) {
 	rows, err := db.DB.Query(dbGetWithDraw, login)
 	if err != nil {
 		if !errors.Is(err, sql.ErrNoRows) {
@@ -92,7 +71,7 @@ func (db *DataBase) GetWithDraw(cookie string) ([]WithDraw, error) {
 	}
 
 	if withdraw == nil {
-		return nil, db.Err.Empty
+		return nil, Empty
 	}
 
 	return withdraw, nil

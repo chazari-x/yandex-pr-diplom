@@ -1,6 +1,7 @@
 package server
 
 import (
+	"log"
 	"net/http"
 
 	"github.com/chazari-x/yandex-pr-diplom/internal/app/config"
@@ -19,6 +20,11 @@ func StartServer() error {
 	if err != nil {
 		return err
 	}
+
+	defer func() {
+		_ = db.DB.Close()
+		log.Print("DB closed")
+	}()
 
 	c := handlers.NewController(conf, db)
 
@@ -45,5 +51,5 @@ func StartServer() error {
 	r.Get("/api/user/withdrawals", c.GetWithDrawAls)
 	//получение информации о выводе средств накопительного счета пользователем
 
-	return http.ListenAndServe(conf.RunAddress, handlers.MiddlewaresConveyor(r))
+	return http.ListenAndServe(conf.RunAddress, c.MiddlewaresConveyor(r))
 }
