@@ -49,7 +49,10 @@ func (db *DataBase) AddOrder(login string, order int) error {
 		return ErrBadOrderNumber
 	}
 
-	exec, err := db.DB.Exec(dbAddOrder, order, login, time.Now().Format(time.RFC3339))
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	exec, err := db.DB.ExecContext(ctx, dbAddOrder, order, login, time.Now().Format(time.RFC3339))
 	if err != nil {
 		return err
 	}
@@ -63,8 +66,11 @@ func (db *DataBase) AddOrder(login string, order int) error {
 		return nil
 	}
 
+	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
 	var orderLogin string
-	if err = db.DB.QueryRow(dbGetOrderLogin, order).Scan(&orderLogin); err != nil {
+	if err = db.DB.QueryRowContext(ctx, dbGetOrderLogin, order).Scan(&orderLogin); err != nil {
 		return err
 	}
 
@@ -105,7 +111,10 @@ func (db *DataBase) GetNotCheckedOrders() ([]string, error) {
 }
 
 func (db *DataBase) UpdateOrder(number, status string, accrual float64) error {
-	exec, err := db.DB.Exec(dbUpdateOrder, status, accrual, number)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	exec, err := db.DB.ExecContext(ctx, dbUpdateOrder, status, accrual, number)
 	if err != nil {
 		return err
 	}
@@ -125,7 +134,10 @@ func (db *DataBase) UpdateOrder(number, status string, accrual float64) error {
 }
 
 func (db *DataBase) GetOrders(login string) ([]Order, error) {
-	rows, err := db.DB.Query(dbGetOrders, login)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	rows, err := db.DB.QueryContext(ctx, dbGetOrders, login)
 	if err != nil {
 		return nil, err
 	}

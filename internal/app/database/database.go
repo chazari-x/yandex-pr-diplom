@@ -60,7 +60,10 @@ func StartDB(c config.Config) (*DataBase, error) {
 
 	log.Print("DB open")
 
-	if _, err = db.Exec(dbCreateTables); err != nil {
+	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	if _, err = db.ExecContext(ctx, dbCreateTables); err != nil {
 		return nil, err
 	}
 

@@ -1,8 +1,10 @@
 package database
 
 import (
+	"context"
 	"database/sql"
 	"errors"
+	"strings"
 	"time"
 )
 
@@ -15,23 +17,23 @@ type WithDraw struct {
 
 var (
 	// Таблица операций withdraw:
-	dbAddWithDraw = `INSERT INTO withdraw VALUES ($1, $2, $3, $4) ON CONFLICT(orderID) DO NOTHING`
 	dbGetWithDraw = `SELECT orderID, sum, processed_at FROM withdraw WHERE login = $1`
+	dbAddWithDraw = `insert into withdraw select $1, $2, $3, $4
+						where not COALESCE((SELECT SUM(accrual) FROM orders WHERE login = 'username' GROUP BY login), 0) -
+						COALESCE((SELECT SUM(sum) FROM withdraw WHERE login = 'username' GROUP BY login), 0) - $3 < 0;`
 )
 
 func (db *DataBase) AddWithDraw(login, order string, sum float64) error {
-	var balance User
-	if err := db.DB.QueryRow(dbGetBalance, login).Scan(&balance.Login, &balance.Current, &balance.WithDraw); err != nil {
-		return err
-	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
 
-	if balance.Current < sum {
-		return ErrNoMoney
-	}
-
-	exec, err := db.DB.Exec(dbAddWithDraw, order, balance.Login, sum, time.Now().Format(time.RFC3339))
+	exec, err := db.DB.ExecContext(ctx, dbAddWithDraw, order, login, sum, time.Now().Format(time.RFC3339))
 	if err != nil {
-		return err
+		if !strings.Contains(err.Error(), "duplicate key value violates unique constraint \"withdraw_pkey\"") {
+			return err
+		}
+
+		return ErrBadOrderNumber
 	}
 
 	affected, err := exec.RowsAffected()
@@ -40,14 +42,17 @@ func (db *DataBase) AddWithDraw(login, order string, sum float64) error {
 	}
 
 	if affected == 0 {
-		return ErrBadOrderNumber
+		return ErrNoMoney
 	}
 
 	return nil
 }
 
 func (db *DataBase) GetWithDraw(login string) ([]WithDraw, error) {
-	rows, err := db.DB.Query(dbGetWithDraw, login)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	rows, err := db.DB.QueryContext(ctx, dbGetWithDraw, login)
 	if err != nil {
 		if !errors.Is(err, sql.ErrNoRows) {
 			return nil, err
