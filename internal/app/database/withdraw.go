@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"log"
 	"strings"
 	"time"
 )
@@ -27,8 +26,6 @@ var (
 func (db *DataBase) AddWithDraw(login, order string, sum float64) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-
-	log.Print(login)
 
 	exec, err := db.DB.ExecContext(ctx, dbAddWithDraw, order, login, sum, time.Now().Format(time.RFC3339), login)
 	if err != nil {
