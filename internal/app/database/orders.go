@@ -1,13 +1,13 @@
 package database
 
 import (
-	"encoding/json"
+	"context"
 	"errors"
-	"io"
 	"log"
-	"net/http"
 	"strconv"
 	"time"
+
+	"github.com/chazari-x/yandex-pr-diplom/internal/app/worker"
 )
 
 type Order struct {
@@ -20,10 +20,11 @@ type Order struct {
 
 var (
 	// Таблица заказов orders:
-	dbAddOrder      = `INSERT INTO orders (number, login, uploaded_at) VALUES ($1, $2, $3) ON CONFLICT(number) DO NOTHING`
-	dbGetOrders     = `SELECT number, status, COALESCE(accrual, 0), uploaded_at FROM orders WHERE login = $1`
-	dbUpdateOrder   = `UPDATE orders SET status = $1, accrual = $2 WHERE number = $3`
-	dbGetOrderLogin = `SELECT login FROM orders WHERE number = $1`
+	dbAddOrder            = `INSERT INTO orders (number, login, uploaded_at) VALUES ($1, $2, $3) ON CONFLICT(number) DO NOTHING`
+	dbGetOrders           = `SELECT number, status, COALESCE(accrual, 0), uploaded_at FROM orders WHERE login = $1`
+	dbGetNotCheckedOrders = `SELECT number FROM orders WHERE status = 'NEW' OR status = 'PROCESSING'`
+	dbUpdateOrder         = `UPDATE orders SET status = $1, accrual = $2 WHERE number = $3`
+	dbGetOrderLogin       = `SELECT login FROM orders WHERE number = $1`
 )
 
 var t = [...]int{0, 2, 4, 6, 8, 1, 3, 5, 7, 9}
@@ -47,7 +48,7 @@ func checkOrderNumber(number int) bool {
 
 func (db *DataBase) AddOrder(login string, order int) error {
 	if !checkOrderNumber(order) {
-		return BadOrderNumber
+		return ErrBadOrderNumber
 	}
 
 	exec, err := db.DB.Exec(dbAddOrder, order, login, time.Now().Format(time.RFC3339))
@@ -61,7 +62,7 @@ func (db *DataBase) AddOrder(login string, order int) error {
 	}
 
 	if affected != 0 {
-		db.getOrderInfo(strconv.Itoa(order))
+		worker.AddOrder(strconv.Itoa(order))
 		return nil
 	}
 
@@ -71,148 +72,43 @@ func (db *DataBase) AddOrder(login string, order int) error {
 	}
 
 	if orderLogin != login {
-		return Used
+		return ErrUsed
 	}
 
-	return Duplicate
+	return ErrDuplicate
 }
 
-type orderStr struct {
-	number string
-	status string
-}
+func (db *DataBase) GetNotCheckedOrders() ([]string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
 
-func (db *DataBase) getOrderInfo(number string) {
-	go func(number string) {
-		db.inputCh <- orderStr{number: number, status: "NEW"}
-	}(number)
-}
+	rows, err := db.DB.QueryContext(ctx, dbGetNotCheckedOrders)
+	if err != nil {
+		return nil, err
+	}
 
-func (db *DataBase) newWorker(input chan orderStr) {
-	go func() {
-		log.Print("starting goroutine")
-
-		defer func() {
-			db.newWorker(input)
-			if x := recover(); x != nil {
-				log.Print("run time panic: ", x)
-			}
-		}()
-
-		for {
-			for o := range input {
-				resp, err := http.Get(db.asa + "/api/orders/" + o.number)
-				if err != nil {
-					go func(o orderStr) {
-						db.inputCh <- o
-					}(o)
-					log.Printf("go number: %s, err: %s", o.number, err.Error())
-					resp.Body.Close()
-					continue
-				}
-
-				b, err := io.ReadAll(resp.Body)
-				if err != nil {
-					go func(o orderStr) {
-						db.inputCh <- o
-					}(o)
-					log.Printf("go number: %s, err: %s", o.number, err.Error())
-					resp.Body.Close()
-					continue
-				}
-
-				resp.Body.Close()
-
-				switch resp.StatusCode {
-				case http.StatusOK:
-					var order Order
-					err = json.Unmarshal(b, &order)
-					if err != nil {
-						go func(o orderStr) {
-							db.inputCh <- o
-						}(o)
-						log.Printf("go number: %s, err: %s", o.number, err.Error())
-						continue
-					}
-
-					order.Number = o.number
-
-					switch order.Status {
-					case "PROCESSING":
-						log.Printf("go number: %s, status: %s", o.number, order.Status)
-						go func(o orderStr, order Order) {
-							if o.status != order.Status {
-								err := db.updateOrder(order)
-								if err != nil {
-									log.Printf("go number: %s, err: %s", o.number, err.Error())
-									return
-								}
-								o.status = "PROCESSING"
-							}
-							db.inputCh <- o
-						}(o, order)
-					case "INVALID", "PROCESSED":
-						log.Printf("go number: %s, status: %s, accrual: %g", o.number, order.Status, order.Accrual)
-						go func(o orderStr, order Order) {
-							if o.status != order.Status {
-								err := db.updateOrder(order)
-								if err != nil {
-									o.status = order.Status
-									db.inputCh <- o
-									log.Printf("go number: %s, err: %s", o.number, err.Error())
-									return
-								}
-							}
-						}(o, order)
-					default:
-						log.Printf("go number: %s, status: %s", o.number, order.Status)
-						go func(o orderStr) {
-							db.inputCh <- o
-						}(o)
-					}
-				case http.StatusTooManyRequests:
-					log.Printf("go number: %s, status: %s", o.number, resp.Status)
-					go func(o orderStr) {
-						db.inputCh <- o
-					}(o)
-					atoi, err := strconv.Atoi(resp.Header.Get("Retry-After"))
-					if err != nil {
-						log.Printf("go number: %s, err: %s", o.number, err.Error())
-						time.Sleep(time.Second * 15)
-					} else {
-						time.Sleep(time.Second * time.Duration(atoi))
-					}
-				case http.StatusInternalServerError:
-					log.Printf("go number: %s, status: %s", o.number, resp.Status)
-					go func(o orderStr) {
-						db.inputCh <- o
-					}(o)
-				case http.StatusNoContent:
-					log.Printf("go number: %s, status: %s", o.number, resp.Status)
-					go func(o orderStr) {
-						if o.status != "PROCESSING" {
-							err := db.updateOrder(Order{Status: "PROCESSING", Number: o.number})
-							if err != nil {
-								log.Printf("go number: %s, err: %s", o.number, err.Error())
-								return
-							}
-							o.status = "PROCESSING"
-						}
-						db.inputCh <- o
-					}(o)
-				default:
-					log.Printf("go number: %s, status: %s", o.number, resp.Status)
-					go func(o orderStr) {
-						db.inputCh <- o
-					}(o)
-				}
-			}
+	var orders []string
+	for rows.Next() {
+		var order string
+		err := rows.Scan(&order)
+		if err != nil {
+			log.Print(err)
+			continue
 		}
-	}()
+
+		orders = append(orders, order)
+	}
+
+	if err := rows.Err(); err != nil {
+		log.Print(err)
+		return nil, err
+	}
+
+	return orders, nil
 }
 
-func (db *DataBase) updateOrder(order Order) error {
-	exec, err := db.DB.Exec(dbUpdateOrder, order.Status, order.Accrual, order.Number)
+func (db *DataBase) UpdateOrder(number, status string, accrual float64) error {
+	exec, err := db.DB.Exec(dbUpdateOrder, status, accrual, number)
 	if err != nil {
 		return err
 	}
@@ -226,7 +122,7 @@ func (db *DataBase) updateOrder(order Order) error {
 		return errors.New("failed update order")
 	}
 
-	log.Printf("update order: number: %s, status: %s, accrual: %g", order.Number, order.Status, order.Accrual)
+	log.Printf("update order: number: %s, status: %s, accrual: %g", number, status, accrual)
 
 	return nil
 }
@@ -252,7 +148,7 @@ func (db *DataBase) GetOrders(login string) ([]Order, error) {
 	}
 
 	if orders == nil {
-		return nil, Empty
+		return nil, ErrEmpty
 	}
 
 	return orders, nil

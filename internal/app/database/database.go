@@ -13,19 +13,17 @@ import (
 )
 
 type DataBase struct {
-	asa     string
-	DB      *sql.DB
-	inputCh chan orderStr
+	DB *sql.DB
 }
 
 var (
-	Used             = errors.New("used")
-	Empty            = errors.New("empty")
-	NoMoney          = errors.New("no money")
-	Duplicate        = errors.New("duplicate")
-	WrongData        = errors.New("wrong data")
-	BadOrderNumber   = errors.New("bad order number")
-	RegisterConflict = errors.New("register conflict")
+	ErrUsed             = errors.New("used")
+	ErrEmpty            = errors.New("empty")
+	ErrNoMoney          = errors.New("no money")
+	ErrDuplicate        = errors.New("duplicate")
+	ErrWrongData        = errors.New("wrong data")
+	ErrBadOrderNumber   = errors.New("bad order number")
+	ErrRegisterConflict = errors.New("register conflict")
 )
 
 var dbCreateTables = `CREATE TABLE IF NOT EXISTS users (
@@ -47,8 +45,6 @@ var dbCreateTables = `CREATE TABLE IF NOT EXISTS users (
 							sum 			NUMERIC 			NOT NULL,
 							processed_at	VARCHAR 			NOT NULL);`
 
-var dbGetNotCheckedOrders = `SELECT number, status FROM orders WHERE status = 'NEW' OR status = 'PROCESSING'`
-
 func StartDB(c config.Config) (*DataBase, error) {
 	db, err := sql.Open("postgres", c.DataBaseURI)
 	if err != nil {
@@ -68,37 +64,5 @@ func StartDB(c config.Config) (*DataBase, error) {
 		return nil, err
 	}
 
-	dBase := &DataBase{asa: c.AccrualSystemAddress, DB: db, inputCh: make(chan orderStr)}
-
-	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-
-	rows, err := db.QueryContext(ctx, dbGetNotCheckedOrders)
-	if err != nil {
-		return nil, err
-	}
-
-	go func(rows *sql.Rows) {
-		var orders []orderStr
-		for rows.Next() {
-			var order orderStr
-			err := rows.Scan(&order.number, &order.status)
-			if err != nil {
-				log.Print(err)
-				continue
-			}
-
-			orders = append(orders, order)
-		}
-
-		go func(orders []orderStr) {
-			for _, order := range orders {
-				dBase.inputCh <- order
-			}
-		}(orders)
-	}(rows)
-
-	dBase.newWorker(dBase.inputCh)
-
-	return dBase, nil
+	return &DataBase{DB: db}, nil
 }

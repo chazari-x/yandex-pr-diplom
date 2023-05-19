@@ -45,7 +45,7 @@ func (db *DataBase) Register(login, pass, cookie string) error {
 	}
 
 	if affected == 0 {
-		return RegisterConflict
+		return ErrRegisterConflict
 	}
 
 	return nil
@@ -55,7 +55,7 @@ func (db *DataBase) Login(login, pass, cookie string) error {
 	var cookieDB string
 	if err := db.DB.QueryRow(dbAuthorization, login, pass).Scan(&cookieDB); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return WrongData
+			return ErrWrongData
 		}
 
 		if !strings.Contains(err.Error(), "name \"cookie\": converting NULL to string is unsupported") {

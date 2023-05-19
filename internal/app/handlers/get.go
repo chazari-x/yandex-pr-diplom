@@ -29,7 +29,7 @@ func (c *Controller) GetOrders(w http.ResponseWriter, r *http.Request) {
 
 	orders, err := c.db.GetOrders(cookie.Login)
 	if err != nil {
-		if errors.Is(err, database.Empty) {
+		if errors.Is(err, database.ErrEmpty) {
 			log.Printf("GetOrders: %d, cookie: %s", http.StatusNoContent, cookie)
 			w.WriteHeader(http.StatusNoContent)
 			return
@@ -124,7 +124,7 @@ func (c *Controller) GetWithDrawAls(w http.ResponseWriter, r *http.Request) {
 
 	withdraw, err := c.db.GetWithDraw(cookie.Login)
 	if err != nil {
-		if errors.Is(err, database.Empty) {
+		if errors.Is(err, database.ErrEmpty) {
 			log.Printf("GetWithDraw: %d, cookie: %s", http.StatusNoContent, cookie)
 			w.WriteHeader(http.StatusNoContent)
 			return

@@ -49,7 +49,7 @@ func (c *Controller) PostRegister(w http.ResponseWriter, r *http.Request) {
 
 	err = c.db.Register(user.Login, user.Password, cookie.ID)
 	if err != nil {
-		if errors.Is(err, database.RegisterConflict) {
+		if errors.Is(err, database.ErrRegisterConflict) {
 			log.Printf("PostRegister: %d, cookie: %s, login: %s, password: %s",
 				http.StatusConflict, cookie, user.Login, user.Password)
 			w.WriteHeader(http.StatusConflict)
@@ -102,7 +102,7 @@ func (c *Controller) PostLogin(w http.ResponseWriter, r *http.Request) {
 	var status = http.StatusOK
 	err = c.db.Login(user.Login, user.Password, cookie.ID)
 	if err != nil {
-		if !errors.Is(err, database.WrongData) {
+		if !errors.Is(err, database.ErrWrongData) {
 			log.Printf("PostLogin: %s, login: %s, password: %s", err.Error(), user.Login, user.Password)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
@@ -155,19 +155,19 @@ func (c *Controller) PostOrders(w http.ResponseWriter, r *http.Request) {
 
 	err = c.db.AddOrder(cookie.Login, order)
 	if err != nil {
-		if errors.Is(err, database.BadOrderNumber) {
+		if errors.Is(err, database.ErrBadOrderNumber) {
 			log.Printf("PostOrders: %d, cookie: %s, order: %d", http.StatusUnprocessableEntity, cookie, order)
 			w.WriteHeader(http.StatusUnprocessableEntity)
 			return
 		}
 
-		if errors.Is(err, database.Duplicate) {
+		if errors.Is(err, database.ErrDuplicate) {
 			log.Printf("PostOrders: %d, cookie: %s, order: %d", http.StatusOK, cookie, order)
 			w.WriteHeader(http.StatusOK)
 			return
 		}
 
-		if errors.Is(err, database.Used) {
+		if errors.Is(err, database.ErrUsed) {
 			log.Printf("PostOrders: %d, cookie: %s, order: %d", http.StatusConflict, cookie, order)
 			w.WriteHeader(http.StatusConflict)
 			return
@@ -227,14 +227,14 @@ func (c *Controller) PostWithDraw(w http.ResponseWriter, r *http.Request) {
 
 	err = c.db.AddWithDraw(cookie.Login, withdraw.Order, withdraw.Sum)
 	if err != nil {
-		if errors.Is(err, database.NoMoney) {
+		if errors.Is(err, database.ErrNoMoney) {
 			log.Printf("PostWithDraw: %d, cookie: %s, order: %s, sum: %g",
 				http.StatusPaymentRequired, cookie, withdraw.Order, withdraw.Sum)
 			w.WriteHeader(http.StatusPaymentRequired)
 			return
 		}
 
-		if errors.Is(err, database.BadOrderNumber) {
+		if errors.Is(err, database.ErrBadOrderNumber) {
 			log.Printf("PostWithDraw: %d, cookie: %s, order: %s, sum: %g",
 				http.StatusUnprocessableEntity, cookie, withdraw.Order, withdraw.Sum)
 			w.WriteHeader(http.StatusUnprocessableEntity)

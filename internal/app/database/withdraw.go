@@ -26,7 +26,7 @@ func (db *DataBase) AddWithDraw(login, order string, sum float64) error {
 	}
 
 	if balance.Current < sum {
-		return NoMoney
+		return ErrNoMoney
 	}
 
 	exec, err := db.DB.Exec(dbAddWithDraw, order, balance.Login, sum, time.Now().Format(time.RFC3339))
@@ -40,7 +40,7 @@ func (db *DataBase) AddWithDraw(login, order string, sum float64) error {
 	}
 
 	if affected == 0 {
-		return BadOrderNumber
+		return ErrBadOrderNumber
 	}
 
 	return nil
@@ -71,7 +71,7 @@ func (db *DataBase) GetWithDraw(login string) ([]WithDraw, error) {
 	}
 
 	if withdraw == nil {
-		return nil, Empty
+		return nil, ErrEmpty
 	}
 
 	return withdraw, nil
