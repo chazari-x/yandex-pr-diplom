@@ -25,7 +25,7 @@ var (
 	dbGetOrderLogin       = `SELECT login FROM orders WHERE number = $1`
 )
 
-var t = [...]int{0, 2, 4, 6, 8, 1, 3, 5, 7, 9}
+var sumOfElementsOfADoubleNumber = [...]int{0, 2, 4, 6, 8, 1, 3, 5, 7, 9}
 
 func checkOrderNumber(number int) bool {
 	s := strconv.Itoa(number)
@@ -36,7 +36,7 @@ func checkOrderNumber(number int) bool {
 			return false
 		}
 		if i&1 == odd {
-			sum += t[c-'0']
+			sum += sumOfElementsOfADoubleNumber[c-'0']
 		} else {
 			sum += int(c - '0')
 		}

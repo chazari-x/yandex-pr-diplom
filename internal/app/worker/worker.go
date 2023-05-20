@@ -12,7 +12,7 @@ import (
 	"github.com/chazari-x/yandex-pr-diplom/internal/app/database"
 )
 
-type Controller struct {
+type worker struct {
 	c  config.Config
 	db *database.DataBase
 }
@@ -39,13 +39,13 @@ func StartWorker(conf config.Config, db *database.DataBase) (chan OrderStr, erro
 		}
 	}(orders)
 
-	c := &Controller{c: conf, db: db}
+	c := &worker{c: conf, db: db}
 	c.newWorker()
 
 	return InputCh, nil
 }
 
-func (c *Controller) newWorker() {
+func (c *worker) newWorker() {
 	go func() {
 		log.Print("starting goroutine")
 
