@@ -105,7 +105,9 @@ func (c *worker) newWorker() {
 									return
 								}
 							}
-							InputCh <- order
+							go func(order OrderStr) {
+								InputCh <- order
+							}(order)
 						}(o, order)
 					case "INVALID", "PROCESSED":
 						log.Printf("go number: %s, status: %s, accrual: %g", order.Number, order.Status, order.Accrual)
@@ -156,7 +158,9 @@ func (c *worker) newWorker() {
 							}
 							o.Status = "PROCESSING"
 						}
-						InputCh <- o
+						go func(o OrderStr) {
+							InputCh <- o
+						}(o)
 					}(o)
 				default:
 					log.Printf("go number: %s, status: %s", o.Number, resp.Status)
